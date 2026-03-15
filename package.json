@@ -1,0 +1,40 @@
+{
+  "name": "onq-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Queen's University onQ (D2L Brightspace) — integrates with Claude Desktop",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "onq-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "postinstall": "playwright install chromium --with-deps"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@napi-rs/canvas": "^0.1.96",
+    "axios": "^1.6.0",
+    "mammoth": "^1.11.0",
+    "pdf-parse": "^2.4.5",
+    "playwright": "^1.40.0",
+    "unpdf": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pdf-parse": "^1.1.5",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "mcp",
+    "d2l",
+    "brightspace",
+    "onq",
+    "queens-university",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT"
+}

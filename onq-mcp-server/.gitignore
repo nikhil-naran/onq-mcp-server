@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.env
+
+# Never commit session files — they contain your login cookies
+~/.onq-session/
+
+# OS
+.DS_Store
+Thumbs.db
