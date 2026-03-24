@@ -107,7 +107,7 @@ import {
   authenticate,
   type StoredSession,
 } from './auth.js';
-import { ONQ_HOST } from './config.js';
+import { ONQ_HOST, KEEP_ALIVE_INTERVAL_MS } from './config.js';
 import {
   ONQApiClient, ONQApiError,
   type TocModule, type TocTopic, type RubricCriterion,
@@ -1464,11 +1464,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+// ─── Session keep-alive ───────────────────────────────────────────────────────
+// Periodically ping D2L to prevent the server-side session from timing out
+// during long Claude sessions. Only runs when we have an active client.
+
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+function startKeepAlive(): void {
+  if (keepAliveTimer) return; // already running
+  keepAliveTimer = setInterval(async () => {
+    if (!apiClient) return;
+    try {
+      await apiClient.whoAmI();
+    } catch {
+      // Session expired between pings — will re-auth on next tool call
+      console.error('Keep-alive ping failed — session may have expired.');
+    }
+  }, KEEP_ALIVE_INTERVAL_MS);
+  // Don't let the timer prevent Node from exiting
+  keepAliveTimer.unref();
+}
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  startKeepAlive();
   console.error('ONQ MCP Server running — waiting for tool calls from Claude.');
 }
 
