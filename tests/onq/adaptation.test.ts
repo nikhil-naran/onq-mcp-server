@@ -107,6 +107,14 @@ describe('OnQ additions', () => {
     const repo = new D2lOnqRepository({ get } as unknown as D2lApiClient, '1.92', ctx.baseUrl);
     expect((await repo.assignmentDetails(1, 7)).rubrics).toHaveLength(1); expect(get).toHaveBeenCalledTimes(3);
   });
+  it('reads the student completion count route and leaves unsupported data unavailable', async () => {
+    const get = vi.fn().mockResolvedValueOnce({ Objects: [{ RequiredItems: 8, CompletedItems: 3 }], Next: null })
+      .mockResolvedValueOnce({ Objects: [] });
+    const repo = new D2lOnqRepository({ get } as unknown as D2lApiClient, '1.92', ctx.baseUrl);
+    expect(await repo.contentCompletions(1)).toMatchObject({ status: 'available', completions: [{ RequiredItems: 8, CompletedItems: 3 }] });
+    expect(get.mock.calls[0]?.[0]).toContain('/content/completions/mycount/');
+    expect(await repo.contentCompletions(1)).toMatchObject({ status: 'unavailable', completions: null, reason: 'unsupported' });
+  });
   it('returns incomplete coverage when one course fails rather than saying nothing is due', async () => {
     const courseRepo = new FakeCourseRepository([new Course({ id: CourseId.of(1), name: 'Math', code: 'MATH', active: true })]);
     const assignmentRepo = new FakeAssignmentRepository(); assignmentRepo.findByCourse = vi.fn().mockRejectedValue(new Error('offline'));

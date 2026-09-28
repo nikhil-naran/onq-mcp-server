@@ -81,7 +81,8 @@ tests/                     ← Vitest mirror of src/
 
 - **DDD layering is enforced** by `dependency-cruiser`. Domain cannot import infrastructure. Run `npm run check:deps` to verify.
 - **Add a new MCP tool** by creating: domain method (if needed) → application use case → infrastructure adapter → tool handler in `src/mcp/tools/` → register in `src/mcp/registry.ts` → schema in `src/mcp/schemas.ts`. See `submit-assignment` for a writes-gated example.
-- **Reading downloaded files in the OnQ tunnel:** use `find_onq_files` to discover metadata and `retrieve_onq_file` to attach the complete original bytes. Do not extract file text, render PDF pages, or save course files on the server. Legacy extraction handlers are not registered with MCP.
+- **Reading downloaded files in the OnQ tunnel:** use `find_onq_files` to discover metadata and `retrieve_onq_file` to return the complete original bytes as an MCP resource. Native ChatGPT attachment support requires live verification. Do not extract file text, render PDF pages, or save course files on the server. Legacy extraction handlers are not registered with MCP.
+- **Windows coursework profile:** `scripts/windows/Start-Tunnel.ps1` sets `ONQ_TOOL_PROFILE=coursework`; keep unreliable completion/quiz-attempt and maintenance tools out of that profile until live student-account checks pass. Keep the distinct list/detail tools and the visual agenda. Use `get_course_overview` for per-section historical access status.
 - **Add a Resource:** `src/mcp/resources/<name>.resource.ts` → register in `resources/registry.ts`
 - **Add a Prompt:** `src/mcp/prompts/<name>.prompt.ts` → register in `prompts/registry.ts` → add i18n keys to all 4 catalogs
 - **Tests live in `tests/`** mirroring `src/`. Coverage threshold is 85% statements (see `vitest.config.ts`).

@@ -22,7 +22,8 @@ export interface RetrieveOnqFileDeps {
   baseUrl: string;
 }
 
-const error = (message: string) => ({ isError: true, content: [{ type: 'text' as const, text: message }] });
+const error = (code: string, message: string) => ({ isError: true,
+  content: [{ type: 'text' as const, text: message }], structuredContent: { status: 'unavailable', error_code: code, message } });
 
 /** Fetch a single authorized source and pass its bytes through unchanged. */
 export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput: unknown) {
@@ -34,7 +35,7 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
   switch (ref.source) {
     case 'topic': {
       const result = await readTopic({ repo: deps.contentRepo, courseId, topicId: ref.topicId });
-      if (result.status !== 'file') return error('This topic does not have a downloadable file.');
+      if (result.status !== 'file') return error('unsupported', 'This topic does not have a downloadable file.');
       data = result.content;
       filename = result.filename?.split(/[?#]/)[0]?.split('/').pop() ||
         `${result.topic?.title ?? `topic-${ref.topicId}`}${result.topic?.fileExtension ?? ''}`;
@@ -49,7 +50,7 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
     case 'assignment': {
       const result = await deps.assignmentRepo.findFiles(courseId, AssignmentId.of(ref.assignmentId));
       const file = result.files.find(f => f.name === ref.name);
-      if (!file) return error('Assignment attachment no longer exists. List its files again.');
+      if (!file) return error('not_found', 'Assignment attachment no longer exists. List its files again.');
       data = await deps.assignmentRepo.findFileBinary(courseId, file);
       filename = file.name;
       break;
@@ -57,7 +58,7 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
     case 'announcement': {
       const announcement = await deps.communicationsRepo.findAnnouncement(courseId, ref.announcementId);
       const file = announcement?.attachments.find(f => f.id === ref.attachmentId);
-      if (!file) return error('Announcement attachment no longer exists. List it again.');
+      if (!file) return error('not_found', 'Announcement attachment no longer exists. List it again.');
       data = await deps.communicationsRepo.downloadAnnouncementAttachment(courseId, ref.announcementId, ref.attachmentId);
       filename = file.name;
       break;
@@ -65,29 +66,32 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
     case 'submission': {
       const submissions = await deps.assignmentRepo.findMySubmissions(courseId, AssignmentId.of(ref.assignmentId));
       const file = submissions.find(s => s.id === ref.submissionId)?.files.find(f => f.name === ref.name);
-      if (!file) return error('Submitted file no longer exists. List submissions again.');
+      if (!file) return error('not_found', 'Submitted file no longer exists. List submissions again.');
       data = await deps.assignmentRepo.findFileBinary(courseId, file);
       filename = file.name;
       break;
     }
   }
-  if (data.length === 0) return error('OnQ returned an empty file.');
-  if (data.length > MAX_FILE_BYTES) return error('File exceeds the 25 MB tunnel limit.');
+  if (data.length === 0) return error('unavailable', 'OnQ returned an empty file.');
+  if (data.length > MAX_FILE_BYTES) return error('too_large', 'File exceeds the 25 MB tunnel limit.');
   const head = data.subarray(0, 8192).toString('utf8');
   if (/<(?:!doctype\s+html|html|body|form)\b/i.test(head) &&
       /(?:sign\s*in|log\s*in|login)/i.test(head)) {
-    return error('OnQ returned a sign-in page instead of the file. Renew the Queen’s browser session.');
+    return error('expired_auth', 'OnQ returned a sign-in page instead of the file. Renew the Queen’s browser session.');
   }
   const detected = detectFileFormat(data, filename);
   const digest = createHash('sha256').update(data).digest('hex');
+  const uri = `onq-file://course/${ref.courseId}/${digest}/${encodeURIComponent(filename)}`;
   return { content: [
     { type: 'text' as const, text: `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). ` +
-      'The complete, unchanged file is attached. The server did not extract text or render pages. ' +
-      'If this client cannot inspect this file type, say so rather than inferring its contents.' },
+      `SHA-256: ${digest}. The complete, unchanged bytes are included as an MCP resource. ` +
+      'The server did not extract text or render pages. If this client cannot open the resource as a file, say so.' },
     { type: 'resource' as const, resource: {
-      uri: `onq-file://course/${ref.courseId}/${digest}/${encodeURIComponent(filename)}`,
+      uri,
       mimeType: detected.mimeType,
       blob: data.toString('base64'),
     } },
-  ] };
+  ], structuredContent: { status: 'ok', file_ref, course_id: ref.courseId, filename,
+    mime_type: detected.mimeType, byte_length: data.length, sha256: digest, resource_uri: uri,
+    retrieved_at: new Date().toISOString() } };
 }

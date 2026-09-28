@@ -4,6 +4,7 @@ import { getAnnouncementsSchema } from '@/mcp/schemas.js';
 import { announcementsToText } from '@/mcp/tool-helpers.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
 import type { OutputContext } from '@/shared-kernel/output/index.js';
+import { encodeOnqFileRef } from '../onq-file-ref.js';
 
 export interface GetAnnouncementsDeps { communicationsRepo: CommunicationsRepository; output: OutputContext; }
 
@@ -14,5 +15,12 @@ export async function handleGetAnnouncements(deps: GetAnnouncementsDeps, rawInpu
   const text = announcementsToText(all.slice(0, input.limit), deps.output, { total: all.length });
   const footer = deps.output.metaFooter();
   const body = footer ? `${text}\n\n${footer}` : text;
-  return { content: [{ type: 'text' as const, text: body }] };
+  return { content: [{ type: 'text' as const, text: body }], structuredContent: {
+    status: 'ok', course_id: input.course_id, total: all.length, has_more: all.length > input.limit,
+    items: all.slice(0, input.limit).map(a => ({ announcement_id: a.id, title: a.title,
+      posted_at: a.postedAt.toISOString(), attachments: a.attachments.map(f => ({
+        name: f.name, size_bytes: f.size, file_ref: encodeOnqFileRef({ source: 'announcement',
+          courseId: input.course_id, announcementId: a.id, attachmentId: f.id }),
+      })) })), retrieved_at: new Date().toISOString(),
+  } };
 }

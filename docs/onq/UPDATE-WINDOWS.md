@@ -34,6 +34,8 @@ Start-ScheduledTask -TaskName 'OnQ ChatGPT'
 
 The existing ChatGPT connection should remain associated with the same tunnel. Refresh the connection's tool list in ChatGPT if the new tools do not appear. Ask for your course list, a seven-day agenda, and one known assignment. Compare them with the OnQ website. Ask for quiz and calendar entries separately and check that unavailable sources are reported as incomplete rather than empty.
 
+The Windows tunnel uses the `coursework` profile. Confirm that `get_content_completions`, `get_quiz_attempts`, `get_classlist_emails`, `clear_cache`, `get_diagnostics`, and `get_audit_log` are absent, while `get_roster` accepts `format="emails"`, `get_course_overview` is present, and `find_onq_files`/`retrieve_onq_file` still work. A forbidden section in a historical course must read as inaccessible, not empty. Compare a known assignment deadline in the Everything agenda view: one event should retain both assignment and calendar source IDs. Compare a PDF and another file's SHA-256 with OnQ downloads before claiming byte parity. Test separately whether ChatGPT can use the MCP resource as a native file attachment; a successful tool call alone does not establish that.
+
 If Queen's asks for sign-in again, run `.\scripts\windows\Login-OnQ.ps1` in the same Windows session, finish SSO/MFA, then restart the tunnel. A Mac-side build and automated tests cannot establish whether Queen's grants each API endpoint to your account.
 
 ## If the update fails

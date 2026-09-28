@@ -1,4 +1,5 @@
 import type { D2lApiClient } from '@/contexts/http-api/D2lApiClient.js';
+import { D2lApiError } from '@/contexts/http-api/errors.js';
 import type { OnqRepository, OnqDetails, OnqCompletions } from '../domain/OnqRepository.js';
 
 export class D2lOnqRepository implements OnqRepository {
@@ -32,11 +33,25 @@ export class D2lOnqRepository implements OnqRepository {
   }
   async contentCompletions(courseId: number): Promise<OnqCompletions> {
     try {
-      const result = await this.client.get<{ Objects?: unknown[] }>(`/d2l/api/le/${this.le}/${courseId}/content/completions/`);
-      if (!Array.isArray(result.Objects)) throw new Error('Unexpected completion response');
-      return { courseId, completions: result.Objects, warnings: [], retrievedAt: new Date().toISOString() };
-    } catch {
-      return { courseId, completions: [], warnings: ['Completion status unavailable; do not mark topics incomplete based on this result.'], retrievedAt: new Date().toISOString() };
+      // The no-argument /completions/ route is a staff-oriented CSV lookup.
+      // /mycount/ is explicitly scoped to the calling student.
+      const result = await this.client.get<{ Objects?: unknown[]; Next?: string | null; PagingInfo?: { HasMoreItems?: boolean } }>(`/d2l/api/le/${this.le}/${courseId}/content/completions/mycount/`);
+      if (!Array.isArray(result.Objects) || result.Objects.length === 0 || !result.Objects.every(item => item && typeof item === 'object' &&
+          typeof (item as { RequiredItems?: unknown }).RequiredItems === 'number' &&
+          typeof (item as { CompletedItems?: unknown }).CompletedItems === 'number')) {
+        throw new Error('Unsupported completion response shape');
+      }
+      const partial = result.PagingInfo?.HasMoreItems === true || Boolean(result.Next);
+      return { courseId, status: partial ? 'partial' : 'available', completions: result.Objects,
+        warnings: partial ? ['More completion pages exist; this is an incomplete result.'] : [],
+        retrievedAt: new Date().toISOString() };
+    } catch (err) {
+      const reason = err instanceof D2lApiError
+        ? err.status === 403 ? 'forbidden' : err.status === 404 ? 'not_found' : err.status === 401 ? 'expired_auth' : 'unavailable'
+        : 'unsupported';
+      return { courseId, status: 'unavailable', completions: null, reason,
+        warnings: ['Completion status unavailable; do not infer zero progress or mark topics incomplete.'],
+        retrievedAt: new Date().toISOString() };
     }
   }
 }

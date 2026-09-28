@@ -7,7 +7,7 @@ const labels={assignment_due:'Assignment due',quiz_due:'Quiz due',quiz_closes:'Q
 function render(){
  if(!data)return;
  const zone=data.timezone||'America/Toronto';$('zone').textContent=zone;
- const rows=data.entries.filter(e=>($('course').value==='all'||String(e.courseId)===$('course').value)&&($('kind').value==='all'||e.kind===$('kind').value));
+ const rows=data.entries.filter(e=>($('course').value==='all'||String(e.courseId)===$('course').value)&&($('kind').value==='all'||e.kind===$('kind').value||e.sources?.some(s=>s.kind===$('kind').value)));
  $('entries').replaceChildren();
  for(const e of rows){
   const date=new Date(e.at);if(!Number.isFinite(date.getTime()))continue;
@@ -15,7 +15,7 @@ function render(){
   t.dateTime=e.at;t.textContent=date.toLocaleDateString('en-CA',{month:'short',day:'numeric',timeZone:zone});small.textContent=date.toLocaleTimeString('en-CA',{hour:'numeric',minute:'2-digit',timeZone:zone});t.append(small);
   course.className='course';course.textContent=e.course;title.className='title';title.textContent=e.title;
   try{const u=new URL(e.url);if(u.origin==='https://onq.queensu.ca'){title.href=u.href;title.target='_blank';title.rel='noopener noreferrer'}}catch{}
-  kind.className='kind';kind.textContent=labels[e.kind]||'Course date';body.append(course,title,kind);li.append(t,body);$('entries').append(li);
+  kind.className='kind';kind.textContent=(e.sources?.length?e.sources.map(s=>labels[s.kind]||'Course date'): [labels[e.kind]||'Course date']).join(' + ');body.append(course,title,kind);li.append(t,body);$('entries').append(li);
  }
  $('empty').hidden=rows.length>0;$('empty').textContent=data.warnings.length?'No matching entries retrieved. Some course information is unavailable.':'No upcoming entries match these filters.';
 }

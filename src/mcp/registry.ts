@@ -42,6 +42,7 @@ import { handleGetRoster, type GetRosterDeps } from './tools/get-roster.tool.js'
 import { handleGetClasslistEmails, type GetClasslistEmailsDeps } from './tools/get-classlist-emails.tool.js';
 import { handleGetSyllabus, type GetSyllabusDeps } from './tools/get-syllabus.tool.js';
 import { handleGetCourseContent, type GetCourseContentDeps } from './tools/get-course-content.tool.js';
+import { handleGetCourseOverview, getCourseOverviewSchema, type GetCourseOverviewDeps } from './tools/get-course-overview.tool.js';
 import { handleGetAnnouncements, type GetAnnouncementsDeps } from './tools/get-announcements.tool.js';
 import { handleGetAnnouncement, getAnnouncementSchema } from './tools/get-announcement.tool.js';
 import { handleGetDiscussions, type GetDiscussionsDeps } from './tools/get-discussions.tool.js';
@@ -90,6 +91,7 @@ export interface ToolDeps
     GetClasslistEmailsDeps,
     GetSyllabusDeps,
     GetCourseContentDeps,
+    GetCourseOverviewDeps,
     GetAnnouncementsDeps,
     GetDiscussionsDeps,
     GetCalendarEventsDeps,
@@ -111,6 +113,7 @@ export interface ToolDeps
 }
 
 export function registerAllTools(server: McpServer, deps: ToolDeps): void {
+  const coursework = process.env.ONQ_TOOL_PROFILE === 'coursework';
   if (deps.onqRepo) {
     registerAgenda(server, deps);
     const repo = deps.onqRepo;
@@ -120,7 +123,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
       inputSchema: onqAssignmentSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     }, input => handleOnqAssignment(repo, input));
-    server.registerTool('get_content_completions', {
+    if (!coursework) server.registerTool('get_content_completions', {
       title: 'Read course completion status',
       description: 'Read recorded topic completion status. Unavailable data means unknown, not incomplete.',
       inputSchema: onqCourseSchema.shape,
@@ -155,7 +158,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     async (input: unknown) => handleListMyCourses(deps, input),
   );
 
-  server.registerTool(
+  if (!coursework) server.registerTool(
     'clear_cache',
     {
       title: 'Clear Cache',
@@ -163,11 +166,12 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Clear cached responses. Use when the user asks to refresh data, or when tools return stale values.\n' +
         'Scope: "all" (default), "http", or "courses".',
       inputSchema: clearCacheSchema.shape,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
     async (input: unknown) => handleClearCache(deps, input),
   );
 
-  server.registerTool(
+  if (!coursework) server.registerTool(
     'get_diagnostics',
     {
       title: 'Get Diagnostics',
@@ -256,6 +260,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Returns file_ref values. Use retrieve_onq_file for the original file bytes.\n' +
         'Use when the user wants to check or re-read something they already turned in.',
       inputSchema: getMySubmissionsSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async (input: unknown) => handleGetMySubmissions(deps, input),
   );
@@ -266,7 +271,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
       title: 'Get Roster',
       description:
         'List classmates, instructors, and TAs for a given course.\n' +
-        'Use when the user asks who is in a class or wants contact info.\n' +
+        'Use format="emails" for visible classlist emails from the same roster read. Hidden emails stay hidden.\n' +
         'role_filter: "all" (default), "student", "instructor", "ta".',
       inputSchema: getRosterSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -274,7 +279,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     async (input: unknown) => handleGetRoster(deps, input),
   );
 
-  server.registerTool(
+  if (!coursework) server.registerTool(
     'get_classlist_emails',
     {
       title: 'Get Classlist Emails',
@@ -318,6 +323,13 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     async (input: unknown) => handleGetCourseContent(deps, input),
   );
 
+  server.registerTool('get_course_overview', {
+    title: 'Check one OnQ course overview and access',
+    description: 'Read only the requested sections of one course. Reports content, assignments, announcements, quizzes and calendar separately as ok, forbidden, not_found or unavailable. Use section-specific tools for full details. Useful for historical courses whose enrollment remains visible but content access has ended.',
+    inputSchema: getCourseOverviewSchema.shape,
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, input => handleGetCourseOverview(deps, input));
+
   server.registerTool(
     'get_announcements',
     {
@@ -341,6 +353,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Return one announcement in full (body as text with links kept) and its attachment file_refs.\n' +
         'Use after get_announcements when an excerpt is truncated or an announcement has attachments.',
       inputSchema: getAnnouncementSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async (input: unknown) => handleGetAnnouncement(deps, input),
   );
@@ -380,6 +393,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Returns file_ref values; use retrieve_onq_file to pass through the complete original file.\n' +
         'Use when the user asks "what do I have to do", "download the assignment", or "read the instructions".',
       inputSchema: getAssignmentFilesSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async (input: unknown) => handleGetAssignmentFiles(deps, input),
   );
@@ -416,7 +430,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     {
       title: 'Retrieve Original OnQ File',
       description:
-        'Return the complete original file bytes from OnQ as an attached MCP resource. ' +
+        'Return the complete original file bytes from OnQ as an MCP resource with SHA-256 metadata. ' +
         'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
         'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
         'The server does not extract text or render pages. If this ChatGPT client cannot inspect the file type, say so.',
@@ -431,7 +445,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     {
       title: 'List Quizzes',
       description:
-        'List quizzes for a course with attempt counts, time limits, and close dates.\n' +
+        'List quizzes for a course with allowed attempts, time limits, and close dates. Personal attempts taken may be unknown.\n' +
         'Read-only — no quiz answers or questions are exposed (intentionally).\n' +
         'Use when the user asks "what quizzes do I have", "what\'s due in X class", or about attempt history.',
       inputSchema: listQuizzesSchema.shape,
@@ -440,7 +454,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     async (input: unknown) => handleListQuizzes(deps, input),
   );
 
-  server.registerTool(
+  if (!coursework) server.registerTool(
     'get_quiz_attempts',
     {
       title: 'Get Quiz Attempts',
@@ -492,7 +506,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     async (input: unknown) => handleGetMyGroups(deps, input),
   );
 
-  server.registerTool(
+  if (!coursework) server.registerTool(
     'get_audit_log',
     {
       title: 'Get Audit Log',

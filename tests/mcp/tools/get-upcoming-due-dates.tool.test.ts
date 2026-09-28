@@ -10,6 +10,8 @@ import { DueDate } from '@/contexts/assignments/domain/DueDate';
 import { Quiz } from '@/contexts/quizzes/domain/Quiz';
 import type { QuizRepository } from '@/contexts/quizzes/domain/QuizRepository';
 import { testOutputContext } from '../../helpers/test-output-context.js';
+import { FakeCalendarRepository } from '@tests/helpers/fakes/FakeCalendarRepository.js';
+import { CalendarEvent } from '@/contexts/calendar/domain/CalendarEvent.js';
 
 const noQuizzes: QuizRepository = { findByCourse: async () => [], findAttempts: async () => [] };
 
@@ -27,6 +29,23 @@ const asn = (id: number, courseOrgUnit: number, name: string, due: Date) =>
   });
 
 describe('get_upcoming_due_dates tool', () => {
+  it('shows matching assignment and calendar deadlines once with both stable source IDs', async () => {
+    const due = new Date(Date.now() + 86_400_000);
+    const courseRepo = new FakeCourseRepository([course(101, 'ECE 264')]);
+    const assignmentRepo = new FakeAssignmentRepository(new Map([[101, [asn(1, 101, 'Lab report', due)]]]));
+    const calendarRepo = new FakeCalendarRepository(new Map([[101, [new CalendarEvent({
+      id: 22, courseOrgUnitId: 101, title: 'Lab report', description: null,
+      startAt: due, endAt: null, location: null,
+    })]]]));
+    const r = await handleGetUpcomingDueDates({ courseRepo, assignmentRepo, calendarRepo,
+      output: testOutputContext() }, { days: 7 });
+    expect(r.structuredContent.entries).toHaveLength(1);
+    expect(r.structuredContent.entries[0]?.sources).toEqual([
+      { id: 'assignment_due:101:1', kind: 'assignment_due' },
+      { id: 'calendar_event:101:22', kind: 'calendar_event' },
+    ]);
+    expect(r.content[0]?.text?.match(/Lab report/g)).toHaveLength(1);
+  });
   it('aggregates assignments across all active courses inside the window', async () => {
     const courseRepo = new FakeCourseRepository([course(101, 'ECE 264'), course(202, 'MA 261')]);
     const assignmentRepo = new FakeAssignmentRepository(new Map([

@@ -15,8 +15,14 @@ export async function handleGetMySubmissions(deps: GetMySubmissionsDeps, rawInpu
   const input = getMySubmissionsSchema.parse(rawInput);
   const all = await deps.assignmentRepo.findMySubmissions(OrgUnitId.of(input.course_id), AssignmentId.of(input.assignment_id));
   const selected = input.submission_id ? all.filter(s => s.id === input.submission_id) : all;
-  if (!selected.length) return { content: [{ type: 'text' as const, text: 'No matching submissions found.' }] };
+  if (!selected.length) return { content: [{ type: 'text' as const, text: 'No matching submissions found.' }],
+    structuredContent: { status: 'ok', course_id: input.course_id, assignment_id: input.assignment_id, items: [], retrieved_at: new Date().toISOString() } };
   const lines = [`${selected.length} submission(s), newest first:`];
+  const items = selected.map(submission => ({ submission_id: submission.id,
+    submitted_at: submission.submittedAt?.toISOString() ?? null,
+    files: submission.files.map(file => ({ name: file.name, size_bytes: file.sizeBytes,
+      file_ref: encodeOnqFileRef({ source: 'submission', courseId: input.course_id,
+        assignmentId: input.assignment_id, submissionId: submission.id, name: file.name }) })) }));
   for (const submission of selected) {
     lines.push(`\n## Submission ${submission.id} — ${submission.submittedAt?.toISOString() ?? submission.submittedAtLabel ?? 'unknown date'}`);
     if (submission.comment) lines.push(`Comment: ${submission.comment}`);
@@ -26,5 +32,7 @@ export async function handleGetMySubmissions(deps: GetMySubmissionsDeps, rawInpu
     })}`);
   }
   lines.push('\nUse retrieve_onq_file(file_ref) to pass through the original submitted file.');
-  return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  return { content: [{ type: 'text' as const, text: lines.join('\n') }],
+    structuredContent: { status: 'ok', course_id: input.course_id, assignment_id: input.assignment_id,
+      items, retrieved_at: new Date().toISOString() } };
 }

@@ -3,7 +3,8 @@ export interface OnqDetails {
   rubrics: unknown[]; warnings: string[]; url: string; retrievedAt: string;
 }
 export interface OnqCompletions {
-  courseId: number; completions: unknown[]; warnings: string[]; retrievedAt: string;
+  courseId: number; status: 'available' | 'partial' | 'unavailable';
+  completions: unknown[] | null; reason?: string; warnings: string[]; retrievedAt: string;
 }
 export interface OnqRepository {
   assignmentDetails(courseId: number, assignmentId: number): Promise<OnqDetails>;

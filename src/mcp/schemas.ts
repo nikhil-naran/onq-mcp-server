@@ -63,6 +63,7 @@ export type GetUpcomingDueDatesInputSchema = z.infer<typeof getUpcomingDueDatesS
 export const getRosterSchema = z.object({
   course_id: z.number().int().positive(),
   role_filter: z.enum(['all', 'student', 'instructor', 'ta']).default('all'),
+  format: z.enum(['people', 'emails']).default('people'),
 }).strict();
 
 export type GetRosterInputSchema = z.infer<typeof getRosterSchema>;

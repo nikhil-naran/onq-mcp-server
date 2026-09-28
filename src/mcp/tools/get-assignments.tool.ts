@@ -4,6 +4,7 @@ import { getAssignmentsSchema } from '@/mcp/schemas.js';
 import { assignmentsToCompact, assignmentsToDetailed } from '@/mcp/tool-helpers.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
 import type { OutputContext } from '@/shared-kernel/output/index.js';
+import { AssignmentId } from '@/contexts/assignments/domain/AssignmentId.js';
 
 export interface GetAssignmentsDeps { assignmentRepo: AssignmentRepository; output: OutputContext; }
 
@@ -17,5 +18,11 @@ export async function handleGetAssignments(deps: GetAssignmentsDeps, rawInput: u
   const text = input.format === 'detailed' ? assignmentsToDetailed(list, deps.output) : assignmentsToCompact(list, deps.output);
   const footer = deps.output.metaFooter();
   const body = footer ? `${text}\n\n${footer}` : text;
-  return { content: [{ type: 'text' as const, text: body }] };
+  return { content: [{ type: 'text' as const, text: body }], structuredContent: {
+    status: 'ok', course_id: input.course_id, items: list.map(a => ({
+      assignment_id: AssignmentId.toNumber(a.id), title: a.name,
+      due_at: a.dueDate.toDate()?.toISOString() ?? null, closes_at: a.endDate?.toISOString() ?? null,
+      submission_status: a.submissionStatus,
+    })), retrieved_at: new Date().toISOString(),
+  } };
 }

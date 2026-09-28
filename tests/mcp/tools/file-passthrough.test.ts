@@ -15,6 +15,8 @@ import { CourseId } from '@/contexts/courses/domain/CourseId.js';
 import { Announcement } from '@/contexts/communications/domain/Announcement.js';
 import { testOutputContext } from '../../helpers/test-output-context.js';
 import { buildPdf, buildPptx } from '@tests/helpers/zip.js';
+import { createHash } from 'node:crypto';
+import { D2lApiError } from '@/contexts/http-api/errors.js';
 
 const course = new Course({ id: CourseId.of(101), name: 'Biology of Cells', code: 'BIOL101', active: true });
 const modules = [new Module({ id: 1, title: 'Week 8 cell diagrams and lecture slides',
@@ -42,6 +44,18 @@ describe('universal OnQ file retrieval', () => {
     expect(body).toContain('Chloroplast');
   });
 
+  it('marks an inaccessible historical course as forbidden rather than empty', async () => {
+    const repo = new FakeContentRepository();
+    vi.spyOn(repo, 'findModules').mockRejectedValue(new D2lApiError(403, '/content/', '{}'));
+    const courseRepo = { findMyCourses: vi.fn().mockResolvedValue([course]) };
+    const result = await handleFindOnqFiles({ courseRepo: courseRepo as never,
+      contentRepo: repo, baseUrl: 'https://onq.queensu.ca' },
+      { query: 'slides', course_id: 101, include_past: true });
+    expect(result.structuredContent.coverage).toEqual([{ course_id: 101, status: 'forbidden' }]);
+    expect(result.structuredContent.status).toBe('unavailable');
+    expect(result.content[0]?.text).toContain('inaccessible materials, not zero files');
+  });
+
   it('passes complete PDF, PowerPoint, and Markdown bytes without parsing them', async () => {
     const repo = new FakeContentRepository(new Map(), new Map([[101, modules]]));
     const pdf = buildPdf(['first', 'later page']);
@@ -55,9 +69,13 @@ describe('universal OnQ file retrieval', () => {
       [encodeOnqFileRef({ source: 'path', courseId: 101, path: '/content/enforced/101-A/a9f2.pptx' }), pptx, 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
       [encodeOnqFileRef({ source: 'path', courseId: 101, path: '/content/enforced/101-A/random.md' }), md, 'text/markdown'],
     ] as const) {
-      const r = fileResource(await handleRetrieveOnqFile(deps, { file_ref: ref }));
+      const result = await handleRetrieveOnqFile(deps, { file_ref: ref });
+      const r = fileResource(result);
       expect(r.mimeType).toBe(mime);
       expect(Buffer.from(r.blob, 'base64')).toEqual(original);
+      expect(result.structuredContent).toMatchObject({ file_ref: ref, filename: expect.any(String),
+        mime_type: mime, byte_length: original.length,
+        sha256: createHash('sha256').update(original).digest('hex') });
     }
   });
 

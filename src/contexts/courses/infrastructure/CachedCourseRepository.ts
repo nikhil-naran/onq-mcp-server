@@ -119,11 +119,7 @@ export class CachedCourseRepository implements CourseRepository {
   }
 
   async findClasslistEmails(id: CourseId): Promise<string[]> {
-    const key = `courses:emails:${CourseId.toNumber(id)}`;
-    const cached = await this.cache.get<string[]>(key);
-    if (cached) return cached;
-    const fresh = await this.inner.findClasslistEmails(id);
-    await this.cache.set(key, fresh, this.ttls.listTtlMs);
-    return fresh;
+    const people = await this.findRoster(id);
+    return people.map(person => person.email).filter((email): email is string => Boolean(email));
   }
 }

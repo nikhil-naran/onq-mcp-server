@@ -2,6 +2,8 @@
 
 Inputs and example outputs for every tool exposed by the server. The full JSON Schema is sent to MCP clients automatically — this doc is the human-readable summary.
 
+The Windows tunnel sets `ONQ_TOOL_PROFILE=coursework`. In that profile, `get_content_completions` and `get_quiz_attempts` are hidden pending student-account validation; `get_classlist_emails` is replaced by `get_roster(format="emails")`; and `clear_cache`, `get_diagnostics`, and `get_audit_log` are hidden as maintenance tools. These legacy tools remain available to local MCP clients when the profile variable is unset. `get_course_overview(course_id, sections?)` gives bounded, per-section access status for one course. `get_upcoming_due_dates` and `show_onq_agenda` share the same handler; matching assignment and calendar deadlines appear once with both source IDs. File bytes still come only from `retrieve_onq_file`, which returns an MCP resource and checksum. Native ChatGPT attachment support needs a live end-to-end check.
+
 ## Read tools (always available)
 
 ### `check_auth`
