@@ -1,6 +1,6 @@
 # OnQ MCP server for ChatGPT
 
-This is Nikhil's personal Windows adaptation of [JhostinAleck/brightspace-mcp](https://github.com/JhostinAleck/brightspace-mcp) for Queen's OnQ. It runs on an always-on Windows desktop and connects to ChatGPT through [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels). Queen's sign-in and MFA happen in a local browser. The supplied setup disables LMS write tools.
+This repository contains the OnQ MCP server for Queen's courses. It runs on a Windows desktop and connects to ChatGPT through [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels). Queen's sign-in and MFA happen in a local browser. The supplied setup disables LMS write tools.
 
 **Windows agent: start with [the handoff](docs/onq/WINDOWS-HANDOFF.md), then follow [the full setup guide](docs/onq/SETUP.md).**
 
@@ -21,13 +21,12 @@ cd .\onq-server
 
 Complete the Queen's sign-in in the browser. Next, [configure the private tunnel](docs/onq/SETUP.md#2-configure-chatgpts-private-tunnel), test ChatGPT, and install the Windows startup task only after a successful manual test.
 
-This branch incorporates upstream `brightspace-mcp` v1.3.1 and the Queen's OnQ adaptations. Automated tests run locally; Queen's tenant responses still require live checks in the Windows session. Do not treat a successful build as proof of those steps.
+This branch is the maintained Windows and ChatGPT version of the OnQ server. It began from Brightspace MCP v1.3.1; the license retains that attribution. Automated tests run locally, while Queen's tenant responses require live checks in the Windows session.
 
 ## Repository notes
 
 - [ONQ-README.md](ONQ-README.md): features and project scope
 - [docs/onq/DESIGN.md](docs/onq/DESIGN.md): adaptation design
-- [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md): documentation retained from the Brightspace base
-- [LICENSE](LICENSE): upstream MIT license
+- [LICENSE](LICENSE): MIT license and attribution
 
 The older `master` branch in this GitHub repository contains an earlier, separate OnQ implementation. Use `codex/onq-windows` for this Windows and ChatGPT setup.
