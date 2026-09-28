@@ -6,14 +6,93 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
-- `brightspace-mcp tui` — full-screen terminal dashboard (Ink 7 + React 19) replacing the broken web UI. Six tabs: Inicio (upcoming assignments, 7-day calendar, recent announcements), Cursos (live search + drill-down with Tareas/Notas/Anuncios sub-tabs), Calendario (30-day agenda), Config (form editor with Zod-derived dropdowns + `$EDITOR` flow), Caché, Logs.
+## [1.3.1] - 2026-09-28
 
 ### Changed
-- Config form dropdowns (`strategy`, `mfa_strategy`, `locale`, `format`) are derived at runtime from Zod schemas — no hardcoded option lists.
+- The package no longer spawns processes, so it needs no shell access: `brightspace-mcp upgrade` checks npm and prints the upgrade command instead of running `npm install -g` itself, and the TUI Config tab shows the config file path to edit in your own editor (and validates it) instead of launching `$EDITOR`.
 
-### Removed
-- `brightspace-mcp ui` command and the Hono + Alpine.js web dashboard. Replaced by `brightspace-mcp tui`.
+### Fixed
+- The v1.3.0 Docker image build hung in the emulated arm64 `npm ci`; the JS is now compiled once on the build platform and jobs have time limits. Existing tags can be re-published with the workflow's `tag` input.
+
+## [1.3.0] - 2026-09-27
+
+### Added
+- `get_my_submissions(course_id, assignment_id)` — list what you (or your group) submitted to an assignment, newest first, and read (`file_name`) or download (`save_to`) the submitted files. Uses `mysubmissions` while the folder is open and falls back to the web UI submission history once it closes (the API answers 403 then).
+
+### Changed
+- `ink` and `react` (only used by `brightspace-mcp tui`) are now optional dependencies, so the MCP server's required dependency tree no longer includes the dashboard's packages. Installs with `--omit=optional` keep a working server; `tui` then explains how to install the dashboard.
+- Replaced `proper-lockfile` (unmaintained since 2021; pulled `retry`, `signal-exit@3`, `graceful-fs`) with a small built-in cross-process file lock using the same `<file>.lock` protocol, so it still excludes processes running older versions.
+
+### Fixed
+- The CLI crashed at startup when installed with `--omit=optional` (pdfjs throws on import without its optional canvas binding); `pdf-parse` is now loaded only when a PDF is extracted.
+- `submit_assignment` UI fallback failed on some tenants: it queried the upload dialog before its document was ready ("My Computer link not found") and waited a fixed 2.5 s for the upload button (filechooser timeout). It now waits for each element, retries the "My Computer" click until the upload button appears, and sets the file on the dialog's file input if no chooser event fires.
+- The UI submit flow only confirmed submissions through `mysubmissions`, which students can be refused (403 on group folders once they close). It now also confirms from the dropbox folder list's submission counter.
+
+## [1.2.0] - 2026-09-27
+
+### Added
+- `get_announcement(course_id, announcement_id)` — one announcement in full (text with paragraphs, list items and links kept) and its attachments; with `attachment_id` it returns the attachment's extracted content (optionally saved with `save_to`).
+- `get_course_file(course_id, path)` — download and read files stored under the course's own `/content/enforced/{ou}-…/` area (PDFs/slides linked or embedded in HTML topics and module descriptions). Accepts paths, tenant URLs, or relative links plus the `topic_id` they came from; other courses, other hosts and path traversal are refused.
+- `get_module(course_id, module_id)` — full module description text, every link/embedded file, topics and submodules.
+- Reusable file extraction module (`shared-kernel/extract`): PDF, DOCX, XLSX/XLSM, PPTX (new), HTML, plain text, CSV, JSON and Jupyter notebooks to text; images to base64; media to metadata.
+- `brightspace-mcp tui` — full-screen terminal dashboard (Ink 7 + React 19) replacing the broken web UI. Six tabs: Inicio (upcoming assignments, 7-day calendar, recent announcements), Cursos (live search + drill-down with Tareas/Notas/Anuncios sub-tabs), Calendario (30-day agenda), Config (form editor with Zod-derived dropdowns + `$EDITOR` flow), Caché, Logs.
+- `get_upcoming_due_dates` also lists active quizzes due in the window, labeled `[quiz]`.
+- `get_assignment_rubric` tool — renders an assignment's rubric as one markdown table per criteria group (criteria × levels with points and descriptions), plus max points and overall levels.
+- `get_assignments` detailed format shows points, open/close dates, group type, allowed file types, link attachments and the rubric name.
+- Update notices reach MCP users: the server checks npm at most once a day and appends a one-time notice to the first tool response when a newer version exists or the installed version is deprecated (security releases). Status also appears under `update` in `get_diagnostics`. Opt out with `BRIGHTSPACE_NO_UPDATE_CHECK=1`.
+- HTML-to-text conversion keeps link targets (`label (href)`), decodes HTML entities in a single pass and drops `javascript:` links and `<script>`/`<style>` bodies.
+- `get_course_content` shows a topic's URL whenever D2L provides one (e.g. Zoom quicklinks classified as `other`).
+- `get_syllabus` helps find a syllabus uploaded to course content: when the course overview is not published (404) or empty it says so and lists up to 5 ranked candidates (topics/files whose title or file name matches multilingual syllabus keywords, matching links in module descriptions and intro pages, syllabus-titled modules, welcome pages) with the exact `get_topic_file` / `get_course_file` / `get_module` call; otherwise it suggests `search_course` / `get_course_content`. Nothing is downloaded beyond at most two small intro HTML pages.
+
+### Changed
+- `get_announcements` lists pinned items first and shows each announcement's id, a ~300 character excerpt (marked when truncated, with the `get_announcement` call for the full text) and its attachments; `limit` now goes up to 200 (D2L returns all announcements at once; the header says "showing N of M").
+- `list_my_courses` compact format shows the course id (`**Name** (id=N) — code`).
+- Course content is loaded with one `GET /content/toc` call instead of one `/structure/` call per module (the old walk remains as a fallback).
+- `get_course_content` shows module description excerpts with their links, a `module_id` for described modules, and `[broken]` topics.
+- `get_topic_file` returns images as MCP image content, audio/video as metadata, renders notebooks as cells, keeps newlines in text/CSV, raises the text limit to 40,000 characters and always reports truncation.
+- `search_course` also searches module description text.
+- Config form dropdowns (`strategy`, `mfa_strategy`, `locale`, `format`) are derived at runtime from Zod schemas — no hardcoded option lists.
+- `get_feedback` shows the per-criterion rubric outcome (level, score, comment) and says "not graded yet" when nothing is released.
+- The MCP server reports its real package version to clients (was hardcoded `0.1.0`).
+- Composition root split into focused builders under `src/composition/` (no behavior change).
+- Docker base image moved to `node:24-alpine`.
+- Dependencies: fixed all high-severity advisories in production deps; CI `npm audit` now gates on production dependencies only.
+
+### Deprecated
+- `brightspace-mcp ui`: the Hono + Alpine.js web dashboard was replaced by `brightspace-mcp tui`. The `ui` command (and its `--port`/`--open` flags, now ignored) remains as an alias that opens the TUI with a deprecation notice, and will be removed in 2.0.
+
+### Fixed
+- `get_roster` / `get_classlist_emails` / group member names used the LP classlist route, which is 404 on real tenants; they now use the LE classlist. Roles are classified by `ClasslistRoleDisplayName` (role ids are tenant-specific: on Uniandes 109 is "Profesor", previously shown as a student). The emails tool explains when the course hides addresses.
+- Unattended Microsoft TOTP logins intermittently timed out: codes are never reused across processes (last time-step persisted, counter only), a code with under 3 s left waits for the next window, and the Microsoft SSO setup preset dismisses "Stay signed in?" via `post_mfa_clicks`.
+- `get_syllabus` states whether the overview is missing (404) or published but empty.
+- Announcement bodies were cut to 100 characters with HTML entities left encoded (`&oacute;`).
+- Announcement authors were always empty: the code read `Author.DisplayName`, which D2L never sends. The `CreatedBy` user id is now resolved through the course classlist; no author is shown when that fails or the instructor hid author info (never a raw id).
+- Announcement attachments were ignored and hidden announcements were not filtered out.
+- The `brightspace://{courseId}/announcements/{id}` resource decodes entities and keeps links and line breaks.
+- `list_my_courses` with `active_only` (the default) returned every course back to years ago because D2L's `Access.IsActive` is true for all enrollments. Current courses are now picked from the enrollment access dates, recent access and term code (rule in `docs/tools.md`); past courses are tagged inactive. This also narrows `get_upcoming_due_dates` and the TUI to current courses.
+- `get_assignment_files` could write outside `save_to`: attachment names come from D2L (sometimes scraped from HTML) and were joined verbatim, so a name like `../../x` escaped the folder. Only the final path segment is used now.
+- Assignment attachments (PDF, XLSX/XLSM, PPTX, …) returned `[PDF — N bytes]` placeholders; they now go through the shared extraction module and return their text.
+- `get_feedback` never returned feedback: it called `/dropbox/folders/{id}/feedback/me`, which is not a Valence route (always 404). Feedback now comes from the grade item value and the rubric assessment.
+- Group and closed assignments were reported as "not submitted" when Brightspace refused the `mysubmissions` request (403/404); they now show "status unavailable".
+- Assignments with no due date but an availability end date now show the close date instead of "no due date".
+- `SubmissionType` sent as a bare number (LE 1.99) was ignored, so the submission mode was always `unknown`.
+- The assignment cache dropped `submissionMode`.
+- MCP resources `brightspace://…/content/topics/{id}` and `…/assignments/{id}/files` always fell back to base64: they still used the default export removed in `pdf-parse` v2. They now use the shared extraction module (PDF, Office, HTML, text; images as blobs).
+- `get_calendar_events` always returned nothing: the adapter expected `Name`/`StartDate` and sent `rangeStart`/`rangeEnd`. It now reads the real D2L shape (`Title`, `StartDateTime`/`EndDateTime`, `LocationName`, all-day `StartDay`/`EndDay`), queries `calendar/events/myEvents/` with `startDateTime`/`endDateTime` following every page (falls back to `calendar/events/` with client-side filtering), strips HTML from descriptions, and no longer prints a redundant end time for zero-length events.
+- `list_quizzes` only returned the first 20 quizzes; it now follows `Next`/bookmark pagination.
+- `list_quizzes` showed every quiz as "(unlimited)" and "0 taken": attempts come from `AttemptsAllowed.{IsUnlimited, NumberOfAttemptsAllowed}`, and the unknown per-student count is shown as "N attempts allowed" instead of a fake 0. Time limits come from `SubmissionTimeLimit`, auto-grade from `IsAutoSetGraded`.
+- `list_quizzes format=detailed` crashed with `q.instructions.replace is not a function`: the rich-text `Description.Text.{Text,Html}` is now unwrapped, and HTML/entities are stripped.
+- `list_quizzes` now shows open/due/close dates and `[inactive]` quizzes, in the configured timezone/locale instead of raw UTC ISO.
+- `get_quiz_attempts` explains the 403 students get (`Quizzing.GradeAttempts`) instead of returning a raw API error; it also follows pagination, accepts `Score` as a number, and formats times in the configured timezone.
+- `get_upcoming_due_dates` printed UTC (a 23:59 Bogotá deadline showed as 04:59 the next day); it now uses the configured timezone/locale.
+- Well-formed 4xx responses (e.g. a topic without an attached file) no longer trip the HTTP circuit breaker.
+- The calendar cache never hit because its key used millisecond-precision timestamps.
+- Content topics were all classified `[other]`: topic kinds now come from `ActivityType` / quicklink type / `TopicType` (`file`, `link`, `quiz`, `lti`, …).
+- Module descriptions were dropped, hiding all material in courses that keep it there.
+- Office files whose first zip entry is `[Content_Types].xml` came back as `[ZIP — N bytes]`; PowerPoint had no extractor.
+- `get_topic_file` requested `/topics/{id}/file` for links, quiz quicklinks and LTI topics (404); it now returns the URL with a hint, and broken topics get an explicit message.
+- Images and other media fell back to the browser-rendered D2L page, returning the navigation chrome and the user's name.
+- `d2lSessionVal` session tokens embedded in content links are no longer echoed back.
 
 ## [1.1.0] - 2026-05-12
 

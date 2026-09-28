@@ -10,10 +10,3 @@ describe('version comparison (reused helper)', () => {
     expect(isNewerVersion('1.0.0', '1.0.0')).toBe(false);
   });
 });
-
-describe('checkForUpdate export', async () => {
-  const mod = await import('@/cli/commands/serve.js');
-  it('exports checkForUpdate function', () => {
-    expect(typeof mod.checkForUpdate).toBe('function');
-  });
-});

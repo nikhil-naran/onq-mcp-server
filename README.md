@@ -4,6 +4,8 @@ This is Nikhil's personal Windows adaptation of [JhostinAleck/brightspace-mcp](h
 
 **Windows agent: start with [the handoff](docs/onq/WINDOWS-HANDOFF.md), then follow [the full setup guide](docs/onq/SETUP.md).**
 
+**Already running the older server on Windows? Follow [the update guide](docs/onq/UPDATE-WINDOWS.md).** Stop the tunnel before updating, then compare course data with the OnQ website after restarting it.
+
 ## Get this source on Windows
 
 Install Node.js 24 and Git, then in PowerShell:
@@ -19,7 +21,7 @@ cd .\onq-server
 
 Complete the Queen's sign-in in the browser. Next, [configure the private tunnel](docs/onq/SETUP.md#2-configure-chatgpts-private-tunnel), test ChatGPT, and install the Windows startup task only after a successful manual test.
 
-This source was [validated locally on macOS](docs/onq/VALIDATION.md). Windows execution, Queen's tenant access, and ChatGPT connection still need live verification. Do not treat a successful build as proof of those steps.
+This branch incorporates upstream `brightspace-mcp` v1.3.1 and the Queen's OnQ adaptations. Automated tests run locally; Queen's tenant responses still require live checks in the Windows session. Do not treat a successful build as proof of those steps.
 
 ## Repository notes
 

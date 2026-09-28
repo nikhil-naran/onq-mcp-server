@@ -9,15 +9,16 @@ import { AssignmentId } from '@/contexts/assignments/domain/AssignmentId.js';
 import type { Classmate } from '@/contexts/courses/domain/Classmate.js';
 import type { Syllabus } from '@/contexts/content/domain/Syllabus.js';
 import type { Module } from '@/contexts/content/domain/Module.js';
-import type { Announcement } from '@/contexts/communications/domain/Announcement.js';
 import type { DiscussionForum } from '@/contexts/communications/domain/DiscussionForum.js';
 import type { CalendarEvent } from '@/contexts/calendar/domain/CalendarEvent.js';
+import { rubricAssessmentsToText } from '@/mcp/rubric-helpers.js';
+import { summarizeDescription } from './module-description.js';
 
 export function coursesToCompact(courses: Course[], ctx: OutputContext): string {
   if (courses.length === 0) return ctx.t('courses.empty');
   const items = courses.map((c) => {
     const tag = c.active ? '' : ` ${ctx.md.italic(`[${ctx.t('courses.inactive')}]`)}`;
-    return `${ctx.md.bold(c.name)} — ${c.code}${tag}`;
+    return `${ctx.md.bold(c.name)} (id=${CourseId.toNumber(c.id)}) — ${c.code}${tag}`;
   });
   return [
     ctx.md.h3(ctx.t('courses.count', { count: courses.length })),
@@ -78,7 +79,56 @@ export function feedbackToText(fb: Feedback | null, ctx: OutputContext): string 
     ? `\n${ctx.t('feedback.released_at', { when: ctx.formatDate(fb.releasedAt) })}`
     : '';
   const text = fb.text ? `\n\n${ctx.md.blockquote(fb.text)}` : '';
-  return [ctx.md.h4(ctx.t('feedback.header')), `${score}${pct}${released}${text}`].join('\n\n');
+  const rubrics = fb.rubricAssessments ?? [];
+  return [
+    ctx.md.h4(ctx.t('feedback.header')),
+    `${score}${pct}${released}${text}`,
+    ...(rubrics.length > 0 ? [rubricAssessmentsToText(rubrics, ctx)] : []),
+  ].join('\n\n');
+}
+
+function assignmentStatus(a: Assignment, ctx: OutputContext): string {
+  if (a.submissionStatus === 'unknown') {
+    return ctx.t(a.kind === 'group' ? 'assignments.status_unknown_group' : 'assignments.status_unknown');
+  }
+  return a.hasSubmission ? ctx.t('assignments.submitted') : ctx.t('assignments.not_submitted');
+}
+
+/** Due date, or the folder close date when D2L has no due date (EndDate only). */
+function assignmentDue(a: Assignment, ctx: OutputContext): string {
+  const dueDate = a.dueDate.toDate();
+  if (dueDate) return ctx.formatDate(dueDate, 'datetime');
+  if (a.endDate) return ctx.t('assignments.closes', { when: ctx.formatDate(a.endDate, 'datetime') });
+  return ctx.t('assignments.no_due');
+}
+
+function assignmentMetadataLines(a: Assignment, ctx: OutputContext): string[] {
+  const label = (key: string, value: string) => `${ctx.md.bold(ctx.t(key))}: ${value}`;
+  const lines: string[] = [];
+  const due = a.dueDate.toDate();
+  if (due && a.endDate && a.endDate.getTime() !== due.getTime()) {
+    lines.push(label('assignments.closes_label', ctx.formatDate(a.endDate, 'datetime')));
+  }
+  if (a.startDate) lines.push(label('assignments.opens', ctx.formatDate(a.startDate, 'datetime')));
+  if (a.points !== null && a.points !== undefined) {
+    lines.push(label('assignments.points', ctx.formatDecimal(a.points)));
+  }
+  if (a.kind === 'group') lines.push(label('assignments.kind', ctx.t('assignments.kind_group')));
+  const types = a.allowedFileTypes;
+  if (types?.mode === 'custom') {
+    lines.push(label('assignments.file_types', types.extensions.join(', ')));
+  } else if (types?.mode === 'restricted') {
+    lines.push(label('assignments.file_types', ctx.t('assignments.file_types_restricted', { code: types.code })));
+  }
+  const links = a.linkAttachments ?? [];
+  if (links.length > 0) {
+    lines.push(label('assignments.links', links.map((l) => ctx.md.link(l.name, l.url)).join(', ')));
+  }
+  const rubrics = a.rubrics ?? [];
+  if (rubrics.length > 0) {
+    lines.push(label('assignments.rubric', rubrics.map((r) => ctx.t('assignments.rubric_hint', { name: r.name })).join('; ')));
+  }
+  return lines;
 }
 
 export function assignmentsToCompact(assignments: Assignment[], ctx: OutputContext): string {
@@ -88,37 +138,37 @@ export function assignmentsToCompact(assignments: Assignment[], ctx: OutputConte
     ctx.t('assignments.table_headers.due'),
     ctx.t('assignments.table_headers.status'),
   ];
-  const rows = assignments.map((a) => {
-    const dueDate = a.dueDate.toDate();
-    const due = dueDate ? ctx.formatDate(dueDate, 'datetime') : ctx.t('assignments.no_due');
-    const status = a.hasSubmission
-      ? ctx.t('assignments.submitted')
-      : ctx.t('assignments.not_submitted');
-    return [`${a.name} (id=${AssignmentId.toNumber(a.id)})`, due, status];
-  });
+  const rows = assignments.map((a) => [
+    `${a.name} (id=${AssignmentId.toNumber(a.id)})`,
+    assignmentDue(a, ctx),
+    assignmentStatus(a, ctx),
+  ]);
   return [ctx.md.h3(ctx.t('assignments.header')), ctx.md.table(headers, rows)].join('\n\n');
 }
 
 export function assignmentsToDetailed(assignments: Assignment[], ctx: OutputContext): string {
   if (assignments.length === 0) return ctx.t('assignments.empty');
   const blocks = assignments.map((a) => {
-    const dueDate = a.dueDate.toDate();
-    const due = dueDate ? ctx.formatDate(dueDate, 'datetime') : ctx.t('assignments.no_due');
     const instructions = a.instructions
       ? `\n${ctx.md.bold(ctx.t('assignments.instructions'))}: ${a.instructions.replace(/\s+/g, ' ').slice(0, 200)}`
       : '';
     const lastSub =
       a.submissions.length > 0 ? a.submissions[a.submissions.length - 1]!.submittedAt : null;
-    const subs =
-      a.submissions.length === 0
-        ? ctx.t('assignments.submissions_none')
-        : ctx.t('assignments.submissions_count', {
-            count: a.submissions.length,
-            when: ctx.formatDate(lastSub, 'datetime'),
-          });
+    let subs: string;
+    if (a.submissionStatus === 'unknown') {
+      subs = ctx.t(a.kind === 'group' ? 'assignments.submissions_unknown_group' : 'assignments.submissions_unknown');
+    } else if (a.submissions.length === 0) {
+      subs = ctx.t('assignments.submissions_none');
+    } else {
+      subs = ctx.t('assignments.submissions_count', {
+        count: a.submissions.length,
+        when: ctx.formatDate(lastSub, 'datetime'),
+      });
+    }
     return [
       ctx.md.h4(`${a.name} (id=${AssignmentId.toNumber(a.id)})`),
-      `${ctx.md.bold(ctx.t('assignments.table_headers.due'))}: ${due}`,
+      `${ctx.md.bold(ctx.t('assignments.table_headers.due'))}: ${assignmentDue(a, ctx)}`,
+      ...assignmentMetadataLines(a, ctx),
       instructions.trim(),
       subs,
     ]
@@ -162,45 +212,49 @@ export function courseContentToText(
   modules: readonly Module[],
   depth: number,
   ctx: OutputContext,
+  courseId?: number,
 ): string {
   if (modules.length === 0) return ctx.t('content.empty');
   const lines: string[] = [];
+  const courseIdHint = courseId !== undefined ? `course_id=${courseId}, ` : '';
+  let describedModules = 0;
   const walk = (mods: readonly Module[], level: number): void => {
     for (const m of mods) {
-      lines.push(`${'  '.repeat(level)}- ${ctx.md.bold(m.title)}`);
+      const indent = '  '.repeat(level + 1);
+      // Module descriptions often hold the actual material (links to PDFs,
+      // embedded videos): show a short excerpt + the links they contain.
+      const desc = summarizeDescription(m.descriptionHtml);
+      lines.push(`${'  '.repeat(level)}- ${ctx.md.bold(m.title)}${desc ? ` (module_id=${m.id})` : ''}`);
+      if (desc) {
+        describedModules++;
+        if (desc.excerpt && desc.excerpt !== m.title.trim()) lines.push(`${indent}${ctx.md.italic(desc.excerpt)}`);
+        for (const link of desc.links) lines.push(`${indent}↳ ${link}`);
+        if (desc.excerptTruncated || desc.hiddenLinks > 0) {
+          const more = desc.hiddenLinks > 0 ? `+${desc.hiddenLinks} more link(s); ` : '';
+          lines.push(`${indent}↳ (${more}full text: get_module(${courseIdHint}module_id=${m.id}))`);
+        }
+      }
       for (const topic of m.topics) {
+        // D2L classifies some quicklinks (e.g. a Zoom link dropped into a
+        // module) as 'other' rather than 'link', but the Url field is still
+        // populated — show it whenever it's present, not just for kind='link'.
+        const urlSuffix = topic.url ? ` — ${topic.url}` : '';
+        const broken = topic.isBroken ? ' [broken]' : '';
         lines.push(
-          `${'  '.repeat(level + 1)}- ${topic.title} ${ctx.md.italic(`[${topic.kind}]`)} (id=${topic.id})`,
+          `${indent}- ${topic.title} ${ctx.md.italic(`[${topic.kind}]`)} (id=${topic.id})${broken}${urlSuffix}`,
         );
       }
       if (level < depth) walk(m.submodules, level + 1);
     }
   };
   walk(modules, 0);
-  return [ctx.md.h3(ctx.t('content.header')), lines.join('\n')].join('\n\n');
+  const footer = describedModules > 0
+    ? '\n\n_Read a module description in full with get_module(course_id, module_id); download linked /content/enforced/... files with get_course_file(course_id, path)._'
+    : '';
+  return [ctx.md.h3(ctx.t('content.header')), lines.join('\n')].join('\n\n') + footer;
 }
 
-export function announcementsToText(items: Announcement[], ctx: OutputContext): string {
-  if (items.length === 0) return ctx.t('announcements.empty');
-  const headers = [
-    ctx.t('announcements.table_headers.date'),
-    ctx.t('announcements.table_headers.title'),
-    ctx.t('announcements.table_headers.author'),
-  ];
-  const rows = items.map((a) => {
-    const body = (a.html ?? '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 100);
-    return [
-      ctx.formatDate(a.postedAt),
-      `${a.title}${body ? ` — ${ctx.md.italic(body)}` : ''}`,
-      a.authorName ?? '',
-    ];
-  });
-  return [ctx.md.h3(ctx.t('announcements.header')), ctx.md.table(headers, rows)].join('\n\n');
-}
+export { announcementsToText, announcementToText } from './announcement-helpers.js';
 
 export function discussionsToText(forums: DiscussionForum[], ctx: OutputContext): string {
   if (forums.length === 0) return ctx.t('discussions.empty');
@@ -226,12 +280,24 @@ export function calendarEventsToText(
 ): string {
   if (events.length === 0) return ctx.t('calendar.empty_window', { days });
   const items = events.map((e) => {
-    const start = ctx.formatDate(e.startAt, 'datetime');
-    const end = e.endAt
-      ? ` → ${ctx.formatDate(e.endAt, 'datetime').split(',').slice(-1)[0]?.trim() ?? ''}`
-      : '';
+    const hasRange = e.endAt !== null && e.endAt.getTime() !== e.startAt.getTime();
+    let when: string;
+    if (e.isAllDay) {
+      const startDay = ctx.formatDate(e.startAt, 'short');
+      const endDay = hasRange && e.endAt ? ctx.formatDate(e.endAt, 'short') : startDay;
+      when = endDay !== startDay ? `${startDay} → ${endDay}` : startDay;
+    } else {
+      const start = ctx.formatDate(e.startAt, 'datetime');
+      const end = hasRange && e.endAt
+        ? ` → ${ctx.formatDate(e.endAt, 'datetime').split(',').slice(-1)[0]?.trim() ?? ''}`
+        : '';
+      when = `${start}${end}`;
+    }
     const loc = e.location ? ` @ ${e.location}` : '';
-    return `${start}${end} — ${ctx.md.bold(e.title)}${loc}`;
+    const desc = e.description
+      ? ` — ${e.description.length > 160 ? `${e.description.slice(0, 157)}...` : e.description}`
+      : '';
+    return `${when} — ${ctx.md.bold(e.title)}${loc}${desc}`;
   });
   return [ctx.md.h3(ctx.t('calendar.title_window', { days })), ctx.md.bulletList(items)].join(
     '\n\n',

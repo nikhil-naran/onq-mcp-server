@@ -7,8 +7,12 @@ import { Paths } from '@/shared-kernel/config/paths.js';
 describe('Paths', () => {
   it('rootDir is anchored under the user homedir', () => {
     const root = Paths.rootDir();
-    expect(root.startsWith(homedir())).toBe(true);
-    expect(root.endsWith(`${sep}.brightspace-mcp`)).toBe(true);
+    if (process.env['ONQ_DATA_DIR']) {
+      expect(root).toBe(process.env['ONQ_DATA_DIR']);
+    } else {
+      expect(root.startsWith(homedir())).toBe(true);
+      expect(root.endsWith(`${sep}.brightspace-mcp`)).toBe(true);
+    }
   });
 
   it('all artefact paths live under rootDir', () => {

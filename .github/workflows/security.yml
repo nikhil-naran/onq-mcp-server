@@ -13,11 +13,11 @@ jobs:
   gitleaks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
@@ -25,12 +25,16 @@ jobs:
   npm-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with: { node-version: 22, cache: 'npm' }
       - run: npm ci
-      - name: Run npm audit (fail only on high/critical)
-        run: npm audit --audit-level=high
+      # Gate only on what users install. Dev-only advisories (e.g. vite via
+      # vitepress for the docs site) are reported but don't block merges.
+      - name: Run npm audit on production deps (fail on high/critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Report npm audit on all deps (non-blocking)
+        run: npm audit --audit-level=high || true
 
   scorecard:
     runs-on: ubuntu-latest
@@ -40,7 +44,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run OSSF Scorecard

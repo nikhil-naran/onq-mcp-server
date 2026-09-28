@@ -22,3 +22,20 @@ describe('isNewerVersion', () => {
     expect(isNewerVersion('1.0.0', '1.1.0')).toBe(false);
   });
 });
+
+describe('runUpgrade', () => {
+  it('points to the fork update guide instead of upstream npm', async () => {
+    const { vi } = await import('vitest');
+    const { runUpgrade } = await import('@/cli/commands/upgrade.js');
+    const out: string[] = [];
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation((s) => { out.push(String(s)); return true; });
+    try {
+      await runUpgrade();
+    } finally {
+      write.mockRestore();
+    }
+    const text = out.join('');
+    expect(text).toContain('docs/onq/UPDATE-WINDOWS.md');
+    expect(text).not.toContain('npm install -g');
+  });
+});

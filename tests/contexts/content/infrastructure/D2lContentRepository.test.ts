@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import { warmPdfParser } from '@tests/helpers/zip';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import nock from 'nock';
@@ -6,6 +7,8 @@ import { D2lContentRepository } from '@/contexts/content/infrastructure/D2lConte
 import { D2lApiClient } from '@/contexts/http-api/D2lApiClient.js';
 import { AccessToken } from '@/contexts/authentication/domain/AccessToken.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
+
+beforeAll(warmPdfParser, 60_000);
 
 const BASE = 'https://x.com';
 const syllabusFixture = JSON.parse(
@@ -26,6 +29,15 @@ describe('D2lContentRepository', () => {
     expect(syl?.html).toContain('Welcome to ECE 264');
   });
 
+  it('findSyllabus returns an empty syllabus (not null) when the overview exists but has no description', async () => {
+    nock(BASE).get('/d2l/api/le/1.91/103/overview').reply(200, { Description: { Text: '', Html: '' }, UpdatedDate: null });
+    const client = new D2lApiClient({ baseUrl: BASE, getToken: async () => AccessToken.bearer('t') });
+    const repo = new D2lContentRepository(client, { le: '1.91' });
+    const syl = await repo.findSyllabus(OrgUnitId.of(103));
+    expect(syl).not.toBeNull();
+    expect(syl?.html ?? '').toBe('');
+  });
+
   it('findSyllabus returns null when no overview exists (404)', async () => {
     nock(BASE).get('/d2l/api/le/1.91/102/overview').reply(404, '');
     const client = new D2lApiClient({ baseUrl: BASE, getToken: async () => AccessToken.bearer('t') });
@@ -33,7 +45,8 @@ describe('D2lContentRepository', () => {
     expect(await repo.findSyllabus(OrgUnitId.of(102))).toBeNull();
   });
 
-  it('findModules builds the tree with topics', async () => {
+  it('findModules builds the tree with topics (legacy root/structure fallback)', async () => {
+    nock(BASE).get('/d2l/api/le/1.91/101/content/toc').reply(404, '');
     nock(BASE).get('/d2l/api/le/1.91/101/content/root/').reply(200, modulesFixture.root);
     nock(BASE)
       .get('/d2l/api/le/1.91/101/content/modules/500/structure/')

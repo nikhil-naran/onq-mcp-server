@@ -5,10 +5,17 @@ import { Classmate } from '@/contexts/courses/domain/Classmate.js';
 import type { D2lApiClient } from '@/contexts/http-api/D2lApiClient.js';
 import { D2lApiError } from '@/contexts/http-api/errors.js';
 import { UserId } from '@/shared-kernel/types/UserId.js';
+import { isCurrentEnrollment, type EnrollmentWindow } from '@/contexts/courses/domain/currentCourses.js';
 
 interface EnrollmentDto {
   OrgUnit: { Id: number; Name: string; Code: string; Type: { Code: string } };
-  Access: { IsActive: boolean; StartDate?: string | null; EndDate?: string | null };
+  Access: {
+    IsActive: boolean;
+    StartDate?: string | null;
+    EndDate?: string | null;
+    CanAccess?: boolean;
+    LastAccessed?: string | null;
+  };
 }
 interface EnrollmentsPage {
   PagingInfo?: { Bookmark?: string; HasMoreItems?: boolean };
@@ -18,20 +25,18 @@ interface EnrollmentsPage {
 interface ClasslistUserDto {
   Identifier: string;
   DisplayName: string;
-  UserName: string;
+  Username?: string | null;
   Email?: string | null;
   RoleId?: number | null;
+  ClasslistRoleDisplayName?: string | null;
   OrgDefinedId?: string | null;
-}
-
-interface ClasslistEmailDto {
-  Identifier: string;
-  EmailAddress: string | null;
 }
 
 export interface D2lCourseRepositoryOptions {
   le: string;
   lp: string;
+  /** Clock used to decide which enrollments are current (tests inject one). */
+  now?: () => Date;
 }
 
 export class D2lCourseRepository implements CourseRepository {
@@ -66,30 +71,36 @@ export class D2lCourseRepository implements CourseRepository {
       bookmark = next;
     } while (bookmark !== undefined);
 
-    const now = new Date();
-    const courses = allItems
+    const now = this.versions.now?.() ?? new Date();
+    const offerings = allItems
       .filter((e) => {
         const code = e.OrgUnit.Type.Code;
         return code === 'Course' || code === 'Course Offering';
       })
       .map((e) => {
-        const props: CourseProps = {
-          id: CourseId.of(e.OrgUnit.Id),
-          name: e.OrgUnit.Name,
-          code: e.OrgUnit.Code,
-          active: e.Access.IsActive,
-        };
-        if (e.Access.StartDate) props.startDate = new Date(e.Access.StartDate);
-        if (e.Access.EndDate) props.endDate = new Date(e.Access.EndDate);
-        return new Course(props);
+        const window: EnrollmentWindow = { code: e.OrgUnit.Code };
+        if (e.Access.StartDate) window.startDate = new Date(e.Access.StartDate);
+        if (e.Access.EndDate) window.endDate = new Date(e.Access.EndDate);
+        if (e.Access.LastAccessed) window.lastAccessed = new Date(e.Access.LastAccessed);
+        return { e, window };
       });
+    const windows = offerings.map((o) => o.window);
 
-    if (!opts?.activeOnly) return courses;
-    return courses.filter((c) => {
-      if (c.active) return true;
-      if (c.startDate && c.endDate) return now >= c.startDate && now <= c.endDate;
-      return false;
+    // `Access.IsActive` is true for every past enrollment too, so "active"
+    // here means usable *and* current by the rule in currentCourses.ts.
+    const courses = offerings.map(({ e, window }) => {
+      const props: CourseProps = {
+        id: CourseId.of(e.OrgUnit.Id),
+        name: e.OrgUnit.Name,
+        code: e.OrgUnit.Code,
+        active: e.Access.IsActive && e.Access.CanAccess !== false && isCurrentEnrollment(window, now, windows),
+      };
+      if (window.startDate) props.startDate = window.startDate;
+      if (window.endDate) props.endDate = window.endDate;
+      return new Course(props);
     });
+
+    return opts?.activeOnly ? courses.filter((c) => c.active) : courses;
   }
 
   async findById(id: CourseId): Promise<Course | null> {
@@ -123,41 +134,56 @@ export class D2lCourseRepository implements CourseRepository {
     }
   }
 
+  // The LP classlist route (/lp/{v}/{ou}/classlist/) is 404 on real tenants;
+  // the LE one is what students can read.
+  private async fetchClasslist(orgUnit: number): Promise<ClasslistUserDto[]> {
+    return this.client.get<ClasslistUserDto[]>(`/d2l/api/le/${this.versions.le}/${orgUnit}/classlist/`);
+  }
+
   async findRoster(id: CourseId): Promise<Classmate[]> {
-    const orgUnit = CourseId.toNumber(id);
-    const users = await this.client.get<ClasslistUserDto[]>(
-      `/d2l/api/lp/${this.versions.lp}/${orgUnit}/classlist/`,
-    );
+    const users = await this.fetchClasslist(CourseId.toNumber(id));
     return users.map((u) => this.toClassmate(u));
   }
 
+  // There is no student-readable email route (classlist/email/ is 404 on both
+  // LP and LE); emails come from the classlist and are often hidden by policy.
   async findClasslistEmails(id: CourseId): Promise<string[]> {
-    const orgUnit = CourseId.toNumber(id);
-    const emails = await this.client.get<ClasslistEmailDto[]>(
-      `/d2l/api/lp/${this.versions.lp}/${orgUnit}/classlist/email/`,
-    );
-    return emails
-      .map((e) => e.EmailAddress)
+    const users = await this.fetchClasslist(CourseId.toNumber(id));
+    return users
+      .map((u) => u.Email)
       .filter((e): e is string => typeof e === 'string' && e.length > 0);
   }
 
   private toClassmate(dto: ClasslistUserDto): Classmate {
-    const role = this.classifyRole(dto.RoleId);
+    const role = this.classifyRole(dto.RoleId, dto.ClasslistRoleDisplayName);
     return new Classmate({
       userId: UserId.of(Number.parseInt(dto.Identifier, 10)),
       displayName: dto.DisplayName,
-      uniqueName: dto.UserName,
+      uniqueName: dto.Username ?? '',
       email: dto.Email ?? null,
       role,
     });
   }
 
+  /**
+   * Role ids are tenant-specific (Uniandes: 109 = "Profesor", 110 =
+   * "Estudiante"), so classify by the role's display name and only fall back
+   * to D2L's stock ids when no name is given.
+   */
   private classifyRole(
     roleId: number | null | undefined,
+    roleName: string | null | undefined,
   ): 'student' | 'instructor' | 'ta' | 'other' {
-    if (roleId === 109) return 'student';
-    if (roleId === 103) return 'instructor';
-    if (roleId === 112) return 'ta';
+    const name = (roleName ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (name) {
+      if (/\b(asistente|assistant|monitor|ta|tutor)\b/.test(name)) return 'ta';
+      if (/\b(profesor|professor|instructor|teacher|docente)\b/.test(name)) return 'instructor';
+      if (/\b(estudiante|student|learner|alumno)\b/.test(name)) return 'student';
+      return 'other';
+    }
+    if (roleId === 110) return 'student';
+    if (roleId === 109) return 'instructor';
     return 'other';
   }
+
 }

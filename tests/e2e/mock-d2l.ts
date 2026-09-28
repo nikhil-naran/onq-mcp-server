@@ -60,8 +60,15 @@ export function startMockD2l(): Promise<{ url: string; close: () => Promise<void
           JSON.stringify({
             Items: [
               {
-                OrgUnit: { Id: 1, Name: 'Smoke 101', Code: 'SMK', Type: { Id: 3, Code: 'Course' } },
-                Access: { IsActive: true },
+                OrgUnit: { Id: 1, Name: 'Smoke 101', Code: 'SMK', Type: { Id: 3, Code: 'Course Offering' } },
+                // Real shape: IsActive is true even for past terms; the access window decides "current".
+                Access: {
+                  IsActive: true,
+                  StartDate: new Date(Date.now() - 30 * 86400000).toISOString(),
+                  EndDate: new Date(Date.now() + 90 * 86400000).toISOString(),
+                  CanAccess: true,
+                  LastAccessed: null,
+                },
               },
             ],
           }),
@@ -92,26 +99,47 @@ export function startMockD2l(): Promise<{ url: string; close: () => Promise<void
         ]));
         return;
       }
-      if (req.url?.match(/\/d2l\/api\/lp\/1\.56\/1\/classlist\/$/)) {
-        res.end(JSON.stringify([
-          { Identifier: '42', DisplayName: 'Test User', UserName: 'test', Email: 'test@x.edu', RoleId: 109 },
-        ]));
-        return;
-      }
       if (req.url?.match(/\/d2l\/api\/le\/1\.91\/1\/overview$/)) {
         res.end(JSON.stringify({ Description: { Html: '<p>Smoke syllabus body</p>' } }));
         return;
       }
+      // Real LE news shape: the author is only a user id (CreatedBy), resolved via the LE classlist.
+      const smokeNews = {
+        PinnedDate: null, Id: 900, IsHidden: false,
+        Attachments: [{ FileId: 9001, FileName: 'smoke.txt', Size: 11 }],
+        CreatedBy: 7, CreatedDate: new Date().toISOString(), LastModifiedBy: null, LastModifiedDate: new Date().toISOString(),
+        Title: 'Smoke Announcement', Body: { Text: 'hi', Html: '<p>hi</p>' },
+        StartDate: new Date().toISOString(), EndDate: null, IsGlobal: false, IsPublished: true,
+        ShowOnlyInCourseOfferings: false, IsAuthorInfoShown: true, IsPinned: false, IsStartDateShown: true, SortOrder: 0,
+      };
       if (req.url?.match(/\/d2l\/api\/le\/1\.91\/1\/news\/$/)) {
+        res.end(JSON.stringify([smokeNews]));
+        return;
+      }
+      if (req.url?.match(/\/d2l\/api\/le\/1\.91\/1\/news\/900$/)) {
+        res.end(JSON.stringify(smokeNews));
+        return;
+      }
+      if (req.url?.match(/\/d2l\/api\/le\/1\.91\/1\/news\/900\/attachments\/9001$/)) {
+        res.setHeader('Content-Type', 'text/plain');
+        res.end('smoke file\n');
+        return;
+      }
+      if (req.url?.match(/\/d2l\/api\/le\/1\.91\/1\/classlist\/$/)) {
         res.end(JSON.stringify([
-          { Id: 900, Title: 'Smoke Announcement', Body: { Html: '<p>hi</p>' }, Author: { DisplayName: 'Prof' }, StartDate: new Date().toISOString() },
+          { Identifier: '42', ProfileIdentifier: 'p42', DisplayName: 'Test User', Username: 'test', OrgDefinedId: null, Email: 'test@x.edu', FirstName: 'Test', LastName: 'User', RoleId: 110, LastAccessed: null, IsOnline: false, ClasslistRoleDisplayName: 'Student', Pronouns: null },
+          { Identifier: '7', ProfileIdentifier: 'p7', DisplayName: 'Smoke Instructor', Username: 'si', OrgDefinedId: null, Email: null, FirstName: 'Smoke', LastName: 'Instructor', RoleId: 103, LastAccessed: null, IsOnline: false, ClasslistRoleDisplayName: 'Instructor', Pronouns: null },
         ]));
         return;
       }
       if (req.url?.match(/\/d2l\/api\/le\/1\.91\/1\/calendar\/events\//)) {
-        res.end(JSON.stringify([
-          { Id: 9500, Name: 'Smoke Midterm', Description: null, StartDate: new Date(Date.now() + 86400000).toISOString(), EndDate: null, Location: 'Smoke Hall' },
-        ]));
+        // Real LE shape; myEvents/ is paged ({ Objects, Next }), events/ is a bare array.
+        const event = {
+          CalendarEventId: 9500, OrgUnitId: 1, Title: 'Smoke Midterm', Description: '',
+          StartDateTime: new Date(Date.now() + 86400000).toISOString(), EndDateTime: null,
+          IsAllDayEvent: false, LocationName: 'Smoke Hall',
+        };
+        res.end(JSON.stringify(req.url.includes('/myEvents/') ? { Objects: [event], Next: null } : [event]));
         return;
       }
       res.statusCode = 404;

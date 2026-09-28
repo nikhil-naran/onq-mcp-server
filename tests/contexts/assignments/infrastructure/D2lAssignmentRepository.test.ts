@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { buildPdf, buildXlsx, warmPdfParser } from '@tests/helpers/zip';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import nock from 'nock';
@@ -8,9 +9,10 @@ import { AccessToken } from '@/contexts/authentication/domain/AccessToken';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId';
 import { AssignmentId } from '@/contexts/assignments/domain/AssignmentId';
 
+beforeAll(warmPdfParser, 60_000);
+
 const BASE = 'https://x.com';
 const foldersFixture = JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures/assignments/folders.json'), 'utf-8'));
-const feedbackFixture = JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures/assignments/feedback.json'), 'utf-8'));
 
 afterEach(() => nock.cleanAll());
 
@@ -41,27 +43,6 @@ describe('D2lAssignmentRepository', () => {
     expect(discussion?.instructions).toBeNull();
   });
 
-  it('findFeedback returns Feedback when the endpoint responds 200', async () => {
-    nock(BASE)
-      .get(/\/d2l\/api\/le\/1\.91\/101\/dropbox\/folders\/5001\/feedback\/me$/)
-      .reply(200, feedbackFixture);
-    const client = new D2lApiClient({ baseUrl: BASE, getToken: async () => AccessToken.bearer('t') });
-    const repo = new D2lAssignmentRepository(client, { le: '1.91' });
-    const fb = await repo.findFeedback(OrgUnitId.of(101), AssignmentId.of(5001));
-    expect(fb?.score).toBe(88);
-    expect(fb?.text).toContain('tighten');
-  });
-
-  it('findFeedback returns null on 404', async () => {
-    nock(BASE)
-      .get(/\/d2l\/api\/le\/1\.91\/101\/dropbox\/folders\/5002\/feedback\/me$/)
-      .reply(404, '');
-    const client = new D2lApiClient({ baseUrl: BASE, getToken: async () => AccessToken.bearer('t') });
-    const repo = new D2lAssignmentRepository(client, { le: '1.91' });
-    const fb = await repo.findFeedback(OrgUnitId.of(101), AssignmentId.of(5002));
-    expect(fb).toBeNull();
-  });
-
   it('findFiles uses Attachments from folder list when present', async () => {
     const foldersWithAttachments = [
       {
@@ -88,6 +69,26 @@ describe('D2lAssignmentRepository', () => {
     expect(result.files).toHaveLength(1);
     expect(result.files[0]?.name).toBe('rubric.pdf');
     expect(result.fileContents['rubric.pdf']).toMatch(/PDF/);
+  });
+
+  it('findFiles extracts the text of PDF and XLSX attachments', async () => {
+    const folders = [{
+      Id: 5001, Name: 'Lab 4', CustomInstructions: { Html: '' }, DueDate: null, Submissions: [],
+      Attachments: [
+        { FileId: 'p1', FileName: 'LabCS_4.pdf', Size: 1 },
+        { FileId: 'x1', FileName: 'datos.xlsx', Size: 1 },
+      ],
+    }];
+    nock(BASE).get('/d2l/api/le/1.91/101/dropbox/folders/').reply(200, folders);
+    nock(BASE).get('/d2l/api/le/1.91/101/dropbox/folders/5001/attachments/p1').reply(200, buildPdf(['Objetivo del laboratorio']));
+    nock(BASE).get('/d2l/api/le/1.91/101/dropbox/folders/5001/attachments/x1').reply(200, buildXlsx([['col', 'valor'], ['a', '42']]));
+
+    const client = new D2lApiClient({ baseUrl: BASE, getToken: async () => AccessToken.bearer('t') });
+    const repo = new D2lAssignmentRepository(client, { le: '1.91' });
+    const result = await repo.findFiles(OrgUnitId.of(101), AssignmentId.of(5001));
+
+    expect(result.fileContents['LabCS_4.pdf']).toContain('Objetivo del laboratorio');
+    expect(result.fileContents['datos.xlsx']).toContain('42');
   });
 
   it('findFiles falls back to dedicated attachments endpoint when list has none', async () => {
@@ -214,6 +215,6 @@ describe('D2lAssignmentRepository', () => {
 
     // Should not throw — corrupted ZIP/DOCX should return graceful fallback
     const result = await repo.findFiles(OrgUnitId.of(101), AssignmentId.of(5001));
-    expect(result.fileContents['hw.docx']).toMatch(/failed|DOCX/i);
+    expect(result.fileContents['hw.docx']).toMatch(/failed|DOCX|ZIP/i);
   });
 });

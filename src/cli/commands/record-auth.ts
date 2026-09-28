@@ -15,7 +15,6 @@
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { homedir } from 'node:os';
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
@@ -119,7 +118,7 @@ export async function runRecordAuth(opts: RecordAuthOptions): Promise<void> {
     let cookieRef: string;
     switch (saveMode) {
       case 'file': {
-        const cookieFile = resolve(homedir(), '.brightspace-mcp', `cookies-${profileName}.txt`);
+        const cookieFile = resolve(Paths.rootDir(), `cookies-${profileName}.txt`);
         mkdirSync(dirname(cookieFile), { recursive: true });
         writeFileSync(cookieFile, cookieHeader, { encoding: 'utf8', mode: 0o600 });
         cookieRef = `cookiefile:${cookieFile}`;
@@ -137,7 +136,7 @@ export async function runRecordAuth(opts: RecordAuthOptions): Promise<void> {
           process.stdout.write(
             `  ⚠ Keychain unavailable (${err instanceof Error ? err.message : String(err)}). Falling back to file.\n`,
           );
-          const cookieFile = resolve(homedir(), '.brightspace-mcp', `cookies-${profileName}.txt`);
+          const cookieFile = resolve(Paths.rootDir(), `cookies-${profileName}.txt`);
           mkdirSync(dirname(cookieFile), { recursive: true });
           writeFileSync(cookieFile, cookieHeader, { encoding: 'utf8', mode: 0o600 });
           cookieRef = `cookiefile:${cookieFile}`;

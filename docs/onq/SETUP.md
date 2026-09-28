@@ -1,6 +1,6 @@
 # OnQ for ChatGPT — Windows setup
 
-This is Nikhil’s personal adaptation of [JhostinAleck/brightspace-mcp](https://github.com/JhostinAleck/brightspace-mcp), based on commit `6d3b6556eca4752ce34ff3ed582a900a71032bd6`. Keep the upstream MIT license. The local branch is `codex/onq-windows`. Nothing has been pushed or connected to Queen’s yet.
+This is Nikhil’s personal adaptation of [JhostinAleck/brightspace-mcp](https://github.com/JhostinAleck/brightspace-mcp), incorporating upstream v1.3.1. Keep the upstream MIT license. The Windows branch is `codex/onq-windows`. For an existing installation, follow [the update guide](UPDATE-WINDOWS.md).
 
 ## What is ready
 
@@ -81,6 +81,6 @@ PDF downloads are limited to 25 MB; text is limited to 50 pages/60,000 character
 
 ## Development and upstream updates
 
-Run `npm ci --ignore-scripts`, `npm run build`, and `npm run check`. The source checkout includes unreleased upstream code. Do not use the upstream CLI upgrade command to replace this adaptation. Review upstream changes on a separate branch, rerun tests, and verify Queen’s before updating the Windows installation.
+Run `npm ci --ignore-scripts`, `npm run build`, and `npm run check`. This checkout includes upstream v1.3.1 and OnQ-specific changes. Do not install the upstream npm package over this adaptation. Review future upstream changes separately, rerun tests, and verify Queen’s after updating the Windows installation.
 
-This package is prepared for later installation. Windows execution, Queen’s authentication, tunnel initialization, and ChatGPT-host UI rendering have not been performed during preparation.
+The live Queen’s API responses, Windows upgrade, and ChatGPT-host UI rendering must be checked on the running Windows machine after each update.

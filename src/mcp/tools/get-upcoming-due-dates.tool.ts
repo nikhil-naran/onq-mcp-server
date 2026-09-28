@@ -18,7 +18,7 @@ export interface GetUpcomingDueDatesDeps {
 }
 interface Entry {
   id: string; courseId: number; course: string; title: string;
-  kind: 'assignment_due' | 'quiz_closes' | 'calendar_event'; at: string; url?: string;
+  kind: 'assignment_due' | 'quiz_due' | 'quiz_closes' | 'calendar_event'; at: string; url?: string;
 }
 export async function handleGetUpcomingDueDates(deps: GetUpcomingDueDatesDeps, rawInput: unknown) {
   const input = getUpcomingDueDatesSchema.parse(rawInput);
@@ -43,7 +43,13 @@ export async function handleGetUpcomingDueDates(deps: GetUpcomingDueDatesDeps, r
       }],
     ];
     if (deps.quizRepo) jobs.push(['quizzes', async () => {
-      for (const q of await deps.quizRepo!.findByCourse(org)) add(q.id, q.name, 'quiz_closes', q.endDate);
+      for (const q of await deps.quizRepo!.findByCourse(org)) {
+        if (!q.isActive) continue;
+        add(q.id, q.name, 'quiz_due', q.dueDate);
+        if (!q.dueDate || q.endDate?.getTime() !== q.dueDate.getTime()) {
+          add(q.id, q.name, 'quiz_closes', q.endDate);
+        }
+      }
     }]);
     if (deps.calendarRepo) jobs.push(['calendar', async () => {
       for (const e of await deps.calendarRepo!.findEvents(org, from, to)) add(e.id, e.title, 'calendar_event', e.startAt);
@@ -56,13 +62,13 @@ export async function handleGetUpcomingDueDates(deps: GetUpcomingDueDatesDeps, r
   entries.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
   coverage.sort((a, b) => a.courseId - b.courseId || a.source.localeCompare(b.source));
   warnings.sort();
-  const labels = { assignment_due: 'Assignment due', quiz_closes: 'Quiz closes', calendar_event: 'Calendar event' };
+  const labels = { assignment_due: 'Assignment due', quiz_due: 'Quiz due', quiz_closes: 'Quiz closes', calendar_event: 'Calendar event' };
   const rows = entries.map(e => `• ${deps.output.formatDate(new Date(e.at), 'datetime')} (${deps.output.tz}) — ${e.course}: ${e.title} [${labels[e.kind]}]`);
   const summary = rows.length ? `Upcoming agenda (next ${input.days} days):\n${rows.join('\n')}`
     : warnings.length ? 'No entries retrieved. Some sources failed; do not interpret this as no deadlines.'
     : 'No upcoming entries in the sources checked.';
   return {
-    content: [{ type: 'text' as const, text: [summary, ...warnings, 'Quiz closing times and calendar events are labeled separately from assignment due dates.', deps.output.metaFooter()].filter(Boolean).join('\n\n') }],
+    content: [{ type: 'text' as const, text: [summary, ...warnings, 'Quiz due dates, closing times, and calendar events are labeled separately from assignment due dates.', deps.output.metaFooter()].filter(Boolean).join('\n\n') }],
     structuredContent: { entries, warnings, coverage, retrievedAt: from.toISOString(), timezone: deps.output.tz },
     ...(coverage.length && coverage.every(c => !c.ok) ? { isError: true } : {}),
   };

@@ -96,6 +96,14 @@ CI workflows triggered:
 - `release-github.yml` — creates GitHub Release with SBOM
 - `release-docker.yml` — builds and pushes Docker image
 
+### 10b. Security releases: deprecate vulnerable versions
+
+If the release fixes a vulnerability, deprecate the affected range once the fix is on npm. Running servers read this flag and show users a ⚠️ upgrade notice in their next tool response:
+
+```bash
+npm deprecate "brightspace-mcp@<X.Y.Z" "Security fix in vX.Y.Z (<short description>). Please upgrade."
+```
+
 ### 11. Register with MCP registry (after npm publishes)
 
 ```bash
@@ -143,8 +151,12 @@ git add tests/.../__snapshots__/
 git commit -m "fix(tests): remove obsolete snapshots"
 ```
 
-**npm publish requires NPM_TOKEN**
-The `NPM_TOKEN` GitHub secret must be set in repo Settings → Secrets → Actions. Generate at npmjs.com → Access Tokens → Automation token.
+**npm publish uses Trusted Publishing (OIDC) — no token**
+`release-npm.yml` authenticates through the trusted publisher configured on npmjs.com (brightspace-mcp → Settings → Trusted Publisher: `JhostinAleck/brightspace-mcp`, `release-npm.yml`). It needs npm ≥ 11.5.1 (the workflow upgrades npm; Node 22 bundles npm 10). Do not reintroduce `NODE_AUTH_TOKEN`: an expired token makes `npm publish` fail with a misleading `E404 Not Found - PUT`.
+If a tag's publish fails, fix the workflow on `main` and re-publish without moving the tag:
+```bash
+gh workflow run release-npm.yml --repo JhostinAleck/brightspace-mcp -f tag=vX.Y.Z
+```
 
 **Push to remote requires JhostinAleck account**
 If GitHub auth is set to another account:
