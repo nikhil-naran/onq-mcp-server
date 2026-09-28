@@ -66,6 +66,8 @@ Stop the task before deleting the private browser profile for logout. Revoking t
 
 ## Live acceptance checklist
 
+For a complete lecture PDF, ChatGPT can use `list_my_courses` and `get_course_content` to locate a file topic or course file path, then call `get_original_pdf` with `course_id` and either `topic_id` or `path`. This read-only tool returns the original PDF bytes as an embedded MCP resource. It does not extract text, render pages, or save the PDF on the server. Confirm in the actual ChatGPT host that it can inspect a later page or diagram; a successful download alone does not prove this. On 2026-09-28, this was tested through the private OnQ tunnel with a later-page claim checked against OnQ's PDF viewer. Refresh the developer-mode connection after updating tools.
+
 - Courses match OnQ, including expected active courses.
 - Personal grades and quiz attempts are visible without staff permissions.
 - One assignment’s instructions, attachments and rubric match OnQ.
