@@ -53,7 +53,7 @@ export async function handleGetModule(deps: GetModuleDeps, rawInput: unknown) {
   }
   const text = parts.join('\n\n');
   const hint = text.includes('/content/enforced/')
-    ? '\n\n_Download linked /content/enforced/... files with get_course_file(course_id, path); read topics with get_topic_file._'
+    ? '\n\n_Find linked files and topics with find_onq_files, then use retrieve_onq_file for original bytes._'
     : '';
   return { content: [{ type: 'text' as const, text: text + hint }] };
 }

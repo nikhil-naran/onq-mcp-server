@@ -59,10 +59,9 @@ describe('get_syllabus tool', () => {
     expect(text).toMatch(/course overview not published \(404\)/i);
     expect(text).not.toMatch(/empty/i);
 
-    const syllabusCall =
-      'get_course_file(course_id=101, path="/content/enforced/101-202620_TEST1010_1/1_RECURSOS_DE_CONTENIDO/Welcome/TEST1010-syllabus.pdf")';
-    const programaCall = 'get_course_file(course_id=101, path="/content/enforced/101-202620_TEST1010_1/TEST-1010-2026-20_Rev.pdf")';
-    const welcomeCall = 'get_topic_file(course_id=101, topic_id=9001)';
+    const syllabusCall = 'onq-file:path:101:%2Fcontent%2Fenforced%2F101-202620_TEST1010_1%2F1_RECURSOS_DE_CONTENIDO%2FWelcome%2FTEST1010-syllabus.pdf';
+    const programaCall = 'onq-file:path:101:%2Fcontent%2Fenforced%2F101-202620_TEST1010_1%2FTEST-1010-2026-20_Rev.pdf';
+    const welcomeCall = 'onq-file:topic:101:9001';
     expect(text).toContain(syllabusCall);
     expect(text).toContain('¡¡ CHECK THE SYLLABUS HERE !!');
     expect(text).toContain(programaCall);
@@ -88,7 +87,7 @@ describe('get_syllabus tool', () => {
     const text = r.content[0]?.text ?? '';
     expect(text).toContain('https://sharepoint.example.test/doc?e=1');
     expect(text).toMatch(/external/i);
-    expect(text).toContain('get_topic_file(course_id=101, topic_id=5)');
+    expect(text).toContain('onq-file:topic:101:5');
     expect(text).toContain('get_module(course_id=101, module_id=2)');
   });
 });

@@ -4,7 +4,7 @@ This is Nikhil’s personal adaptation of [JhostinAleck/brightspace-mcp](https:/
 
 ## What is ready
 
-Persistent interactive Queen’s sign-in, credential-file repair, rubric and completion tools, bounded PDF slide previews, an agenda with per-source warnings, and an optional filtered agenda component for ChatGPT. LMS submission/posting tools are disabled in this setup. Tools can still save documents to the server filesystem when explicitly requested.
+Persistent interactive Queen’s sign-in, credential-file repair, rubric and completion tools, original file passthrough, an agenda with per-source warnings, and an optional filtered agenda component for ChatGPT. LMS submission/posting tools are disabled in this setup.
 
 ## 1. Prepare Windows
 
@@ -66,12 +66,13 @@ Stop the task before deleting the private browser profile for logout. Revoking t
 
 ## Live acceptance checklist
 
-For a complete lecture PDF, ChatGPT can use `list_my_courses` and `get_course_content` to locate a file topic or course file path, then call `get_original_pdf` with `course_id` and either `topic_id` or `path`. This read-only tool returns the original PDF bytes as an embedded MCP resource. It does not extract text, render pages, or save the PDF on the server. Confirm in the actual ChatGPT host that it can inspect a later page or diagram; a successful download alone does not prove this. On 2026-09-28, this was tested through the private OnQ tunnel with a later-page claim checked against OnQ's PDF viewer. Refresh the developer-mode connection after updating tools.
+For course files, ChatGPT uses `find_onq_files(query)` to search course, module, topic, link, and filename metadata, then `retrieve_onq_file(file_ref)` to receive the complete original file as an embedded MCP resource. Assignment, announcement, and submission metadata tools also return `file_ref` values for the same retrieval tool. The server does not extract file text, render pages, or save files. File discovery cannot see inside a poorly labeled file; when metadata is weak, ChatGPT may need to inspect several candidates. Refresh the ChatGPT connection after updating tools. A PDF later-page claim matched OnQ's viewer on 2026-09-28 using the earlier `get_original_pdf` tool. Repeat this live test with `retrieve_onq_file`, and test PowerPoint and Markdown separately before claiming those formats are understood by ChatGPT.
 
 - Courses match OnQ, including expected active courses.
 - Personal grades and quiz attempts are visible without staff permissions.
 - One assignment’s instructions, attachments and rubric match OnQ.
-- A visual lecture PDF returns the first five page images; remaining pages are clearly disclosed.
+- ChatGPT inspects a later PDF page or diagram from `retrieve_onq_file` without any manual transfer.
+- ChatGPT receives a PowerPoint and Markdown file through the same tool; verify whether it understands each complete file.
 - Agenda displays Toronto-local times and distinguishes closing times from due dates.
 - Denied quiz/calendar requests produce visible incomplete-coverage warnings.
 - Completion access failure is shown as unknown, not unfinished.
@@ -79,7 +80,7 @@ For a complete lecture PDF, ChatGPT can use `list_my_courses` and `get_course_co
 - ChatGPT can call the tools while the Mac/laptop is off.
 - No LMS write tools appear, and the visual component filters course rows correctly.
 
-PDF downloads are limited to 25 MB; text is limited to 50 pages/60,000 characters and previews to five pages/6 MB. Off-origin download redirects are rejected so OnQ cookies cannot be forwarded to another host; some externally hosted course files may need to be opened directly. Rubric and completion API support varies by course/role.
+File passthrough is limited to 25 MB per file. Off-origin download redirects are rejected so OnQ cookies cannot be forwarded to another host; some externally hosted course files may need to be opened directly. Rubric and completion API support varies by course/role.
 
 ## Development and upstream updates
 

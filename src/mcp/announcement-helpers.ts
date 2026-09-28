@@ -1,6 +1,7 @@
 import type { OutputContext } from '@/shared-kernel/output/index.js';
-import type { Announcement, AnnouncementAttachment } from '@/contexts/communications/domain/Announcement.js';
+import type { Announcement } from '@/contexts/communications/domain/Announcement.js';
 import { htmlToPlainText, htmlToText } from '@/shared-kernel/text/htmlLinks.js';
+import { encodeOnqFileRef } from './onq-file-ref.js';
 
 /** Characters of body text shown per announcement in the list view. */
 export const ANNOUNCEMENT_EXCERPT_CHARS = 300;
@@ -23,9 +24,8 @@ function metaLine(a: Announcement, ctx: OutputContext): string {
   return `${[ctx.formatDate(a.postedAt), a.authorName].filter(Boolean).join(' · ')}${pin}`;
 }
 
-function fullTextCall(a: Announcement, attachment?: AnnouncementAttachment): string {
-  const att = attachment ? `, attachment_id=${attachment.id}` : '';
-  return `get_announcement(course_id=${a.courseOrgUnitId}, announcement_id=${a.id}${att})`;
+function fullTextCall(a: Announcement): string {
+  return `get_announcement(course_id=${a.courseOrgUnitId}, announcement_id=${a.id})`;
 }
 
 export interface AnnouncementsToTextOptions {
@@ -59,7 +59,9 @@ export function announcementsToText(
       lines.push(`  ${ex.text}${more}`);
     }
     if (a.attachments.length > 0) {
-      const files = a.attachments.map((f) => `${f.name} (${formatFileSize(f.size)}, attachment_id=${f.id})`);
+      const files = a.attachments.map((f) => `${f.name} (${formatFileSize(f.size)}, file_ref=${encodeOnqFileRef({
+        source: 'announcement', courseId: a.courseOrgUnitId, announcementId: a.id, attachmentId: f.id,
+      })})`);
       lines.push(`  ${ctx.t('announcements.attachments')}: ${files.join(', ')}`);
     }
     return lines.join('\n');
@@ -77,7 +79,9 @@ export function announcementToText(a: Announcement, ctx: OutputContext): string 
   if (body) parts.push(body);
   if (a.attachments.length > 0) {
     const files = a.attachments.map(
-      (f) => `- ${f.name} (${formatFileSize(f.size)}) — read with ${fullTextCall(a, f)}`,
+      (f) => `- ${f.name} (${formatFileSize(f.size)}) — file_ref: ${encodeOnqFileRef({
+        source: 'announcement', courseId: a.courseOrgUnitId, announcementId: a.id, attachmentId: f.id,
+      })}`,
     );
     parts.push(`${ctx.md.bold(`${ctx.t('announcements.attachments')}:`)}\n${files.join('\n')}`);
   }

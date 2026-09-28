@@ -144,6 +144,7 @@ export function detectFileFormat(buf: Buffer, filename?: string | null): Detecte
   if (zip) return zip;
 
   const ext = fileExtension(filename);
+  if ((ext === 'md' || ext === 'markdown') && looksLikeText(buf)) return { format: 'text', mimeType: 'text/markdown' };
   const byExt = ext ? EXT_FORMAT[ext] : undefined;
   if (byExt && !['image', 'audio', 'video'].includes(byExt.format)) return byExt;
   if (ext && TEXT_EXTS.has(ext) && looksLikeText(buf)) return { format: 'text', mimeType: MIME.text };

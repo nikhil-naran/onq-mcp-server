@@ -30,7 +30,6 @@ import type { D2lApiClient } from '@/contexts/http-api/D2lApiClient.js';
 import { D2lApiError } from '@/contexts/http-api/errors.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
 import { UserId } from '@/shared-kernel/types/UserId.js';
-import { extractFileContent, extractedToText } from '@/shared-kernel/extract/extractFileContent.js';
 import { parseValidDate } from '@/shared-kernel/date/parseValidDate.js';
 import type { D2lUiSubmitter } from './D2lUiSubmitter.js';
 import { findHistoryGroupId, parseSubmissionHistory } from './parseSubmissionHistory.js';
@@ -405,17 +404,7 @@ export class D2lAssignmentRepository implements AssignmentRepository {
       }
     }
 
-    const fileContents: Record<string, string> = {};
-    for (const file of files) {
-      try {
-        const buf = await this.client.getRaw(file.url);
-        fileContents[file.name] = extractedToText(await extractFileContent(buf, { filename: file.name }));
-      } catch {
-        fileContents[file.name] = '[download failed]';
-      }
-    }
-
-    return { assignmentId: String(folderId), assignmentName, instructions, files, fileContents };
+    return { assignmentId: String(folderId), assignmentName, instructions, files };
   }
 
   async findFileBinary(_courseId: OrgUnitId, file: { url: string }): Promise<Buffer> {

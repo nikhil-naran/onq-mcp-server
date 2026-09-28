@@ -80,6 +80,6 @@ describe('get_announcements tool', () => {
     const r = await handleGetAnnouncements({ communicationsRepo: repo, output: testOutputContext() }, { course_id: 101 });
     const text = r.content[0]?.text ?? '';
     expect(text).toContain('[Pinned]');
-    expect(text).toContain('Exam logistics.pdf (201 KB, attachment_id=16554181)');
+    expect(text).toContain('Exam logistics.pdf (201 KB, file_ref=onq-file:announcement:101:9:16554181)');
   });
 });

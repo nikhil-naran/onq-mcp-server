@@ -5,6 +5,7 @@ import { getSyllabusSchema } from '@/mcp/schemas.js';
 import { syllabusToText } from '@/mcp/tool-helpers.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
 import type { OutputContext } from '@/shared-kernel/output/index.js';
+import { encodeOnqFileRef } from '../onq-file-ref.js';
 
 export interface GetSyllabusDeps { contentRepo: ContentRepository; output: OutputContext; }
 
@@ -13,11 +14,11 @@ const quote = (s: string): string => `"${s.replace(/"/g, '\\"')}"`;
 function nextCall(c: SyllabusCandidate, courseId: number): string {
   switch (c.target.type) {
     case 'topic':
-      return `get_topic_file(course_id=${courseId}, topic_id=${c.target.topicId})`;
+      return `retrieve_onq_file(file_ref=${quote(encodeOnqFileRef({ source: 'topic', courseId, topicId: c.target.topicId }))})`;
     case 'module':
       return `get_module(course_id=${courseId}, module_id=${c.target.moduleId})`;
     case 'course_file':
-      return `get_course_file(course_id=${courseId}, path=${quote(c.target.path)})`;
+      return `retrieve_onq_file(file_ref=${quote(encodeOnqFileRef({ source: 'path', courseId, path: c.target.path }))})`;
     case 'external':
       return `external link, not downloadable through Brightspace — open in a browser: ${c.target.url}`;
   }

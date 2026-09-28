@@ -25,7 +25,7 @@ src/                       ← TypeScript sources (DDD layout)
     update-notice.ts       ← Appends the "update available" notice to a tool response
   shared-kernel/           ← Cross-cutting (config, types, audit, writes gate)
     output/                ← i18n, timezone formatting, markdown builder
-    extract/               ← File → text/image extraction (PDF, Office, HTML, notebooks)
+    extract/               ← File type detection; legacy extractors are not exposed to ChatGPT
     text/                  ← HTML → text with links preserved, entity decoding
     fs/                    ← atomicWrite, withFileLock (cross-process <file>.lock mutex)
     updates/               ← npm update/deprecation checker, package version
@@ -81,7 +81,7 @@ tests/                     ← Vitest mirror of src/
 
 - **DDD layering is enforced** by `dependency-cruiser`. Domain cannot import infrastructure. Run `npm run check:deps` to verify.
 - **Add a new MCP tool** by creating: domain method (if needed) → application use case → infrastructure adapter → tool handler in `src/mcp/tools/` → register in `src/mcp/registry.ts` → schema in `src/mcp/schemas.ts`. See `submit-assignment` for a writes-gated example.
-- **Reading downloaded files:** use `extractFileContent` (`src/shared-kernel/extract/`) and render with `extractedToMcpContent` (`src/mcp/file-content.ts`) — do not re-implement PDF/Office/HTML sniffing in a tool.
+- **Reading downloaded files in the OnQ tunnel:** use `find_onq_files` to discover metadata and `retrieve_onq_file` to attach the complete original bytes. Do not extract file text, render PDF pages, or save course files on the server. Legacy extraction handlers are not registered with MCP.
 - **Add a Resource:** `src/mcp/resources/<name>.resource.ts` → register in `resources/registry.ts`
 - **Add a Prompt:** `src/mcp/prompts/<name>.prompt.ts` → register in `prompts/registry.ts` → add i18n keys to all 4 catalogs
 - **Tests live in `tests/`** mirroring `src/`. Coverage threshold is 85% statements (see `vitest.config.ts`).

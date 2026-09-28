@@ -20,7 +20,6 @@ import {
   getDiscussionsSchema,
   getCalendarEventsSchema,
   getAssignmentFilesSchema,
-  getTopicFileSchema,
   getAuditLogSchema,
   listQuizzesSchema,
   getQuizAttemptsSchema,
@@ -48,9 +47,8 @@ import { handleGetAnnouncement, getAnnouncementSchema } from './tools/get-announ
 import { handleGetDiscussions, type GetDiscussionsDeps } from './tools/get-discussions.tool.js';
 import { handleGetCalendarEvents, type GetCalendarEventsDeps } from './tools/get-calendar-events.tool.js';
 import { handleGetAssignmentFiles, type GetAssignmentFilesDeps } from './tools/get-assignment-files.tool.js';
-import { handleGetTopicFile, type GetTopicFileDeps } from './tools/get-topic-file.tool.js';
-import { handleGetCourseFile, getCourseFileSchema, type GetCourseFileDeps } from './tools/get-course-file.tool.js';
-import { handleGetOriginalPdf, getOriginalPdfSchema } from './tools/get-original-pdf.tool.js';
+import { handleFindOnqFiles, findOnqFilesSchema, type FindOnqFilesDeps } from './tools/find-onq-files.tool.js';
+import { handleRetrieveOnqFile, retrieveOnqFileSchema, type RetrieveOnqFileDeps } from './tools/retrieve-onq-file.tool.js';
 import { handleGetModule, getModuleSchema, type GetModuleDeps } from './tools/get-module.tool.js';
 import { handleGetAuditLog, type GetAuditLogDeps } from './tools/get-audit-log.tool.js';
 import { handleListQuizzes, type ListQuizzesDeps } from './tools/list-quizzes.tool.js';
@@ -96,8 +94,8 @@ export interface ToolDeps
     GetDiscussionsDeps,
     GetCalendarEventsDeps,
     GetAssignmentFilesDeps,
-    GetTopicFileDeps,
-    GetCourseFileDeps,
+    FindOnqFilesDeps,
+    RetrieveOnqFileDeps,
     GetModuleDeps,
     GetAuditLogDeps,
     ListQuizzesDeps,
@@ -255,8 +253,8 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
       title: 'Get My Submissions',
       description:
         'List the files the user (or their group) submitted to an assignment, newest first — works for open and closed folders.\n' +
-        'With file_name, returns the content of that submitted file; with save_to, downloads the files to a local directory.\n' +
-        'Use when the user wants to check, re-read or recover something they already turned in.',
+        'Returns file_ref values. Use retrieve_onq_file for the original file bytes.\n' +
+        'Use when the user wants to check or re-read something they already turned in.',
       inputSchema: getMySubmissionsSchema.shape,
     },
     async (input: unknown) => handleGetMySubmissions(deps, input),
@@ -296,7 +294,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
       description:
         'Return the course syllabus (overview page) as plain text.\n' +
         'When the overview is not published, lists where the syllabus likely is in course content ' +
-        '(ranked topics, modules, linked files) with the exact get_topic_file / get_course_file / get_module call to read it.\n' +
+        '(ranked topics, modules, linked files) with a retrieve_onq_file reference for downloadable files.\n' +
         'Use when the user wants to know course expectations, grading scheme, or what the class covers.',
       inputSchema: getSyllabusSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -313,7 +311,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'plus a short excerpt of each module description and the file links it contains ' +
         '(some courses keep all their material in module descriptions).\n' +
         'Use when the user asks what materials are posted or wants to navigate modules.\n' +
-        'Follow up with get_topic_file (topic id), get_module (module_id) or get_course_file (/content/enforced/... path).',
+        'Follow up with find_onq_files or get_module, then retrieve_onq_file for complete original files.',
       inputSchema: getCourseContentSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
@@ -340,8 +338,7 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     {
       title: 'Get Announcement',
       description:
-        'Return one announcement in full (body as text with links kept) and its attachments; ' +
-        'with attachment_id, return that attachment\'s content (PDF/Office/text extracted), optionally saving it to save_to.\n' +
+        'Return one announcement in full (body as text with links kept) and its attachment file_refs.\n' +
         'Use after get_announcements when an excerpt is truncated or an announcement has attachments.',
       inputSchema: getAnnouncementSchema.shape,
     },
@@ -379,9 +376,8 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     {
       title: 'Get Assignment Files',
       description:
-        'Download and read the attachments (instructions, templates) posted on a Brightspace assignment.\n' +
-        'Returns the text content of DOCX files and file info for other formats.\n' +
-        'Pass save_to with a folder path (~/..., %VAR%\\..., or absolute) to also save each binary to disk.\n' +
+        'List attachments (instructions, templates) posted on a Brightspace assignment.\n' +
+        'Returns file_ref values; use retrieve_onq_file to pass through the complete original file.\n' +
         'Use when the user asks "what do I have to do", "download the assignment", or "read the instructions".',
       inputSchema: getAssignmentFilesSchema.shape,
     },
@@ -389,19 +385,16 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
   );
 
   server.registerTool(
-    'get_topic_file',
+    'find_onq_files',
     {
-      title: 'Get Topic File',
+      title: 'Find OnQ Files',
       description:
-        'Download and read a content topic file from a Brightspace course.\n' +
-        'Use get_course_content first to find the topic id (shown as id=XXXX next to each topic).\n' +
-        'Use when the user wants to read a specific file posted in the course content ' +
-        '(PDF, DOCX, XLSX/XLSM, PPTX, HTML pages, notebooks, CSV/text; images are returned as images).\n' +
-        'Link / quiz / LTI topics return their URL instead of a file.\n' +
-        'Pass save_to with an absolute or ~/... path to also save the raw file to disk (e.g. ~/Downloads/file.xlsx).',
-      inputSchema: getTopicFileSchema.shape,
+        'Find files across current courses using course, module, topic, and link context even when filenames are poor. ' +
+        'Returns file_ref identifiers for retrieve_onq_file. Searches metadata only; file contents are not extracted.',
+      inputSchema: findOnqFilesSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
-    async (input: unknown) => handleGetTopicFile(deps, input),
+    async (input: unknown) => handleFindOnqFiles(deps, input),
   );
 
   server.registerTool(
@@ -419,32 +412,18 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
   );
 
   server.registerTool(
-    'get_course_file',
+    'retrieve_onq_file',
     {
-      title: 'Get Course File',
+      title: 'Retrieve Original OnQ File',
       description:
-        'Download and read a file stored in the course content area (/content/enforced/{course}-.../file.pdf) — ' +
-        'the PDFs, slides and documents linked or embedded inside HTML topics and module descriptions.\n' +
-        'Pass the path exactly as shown by get_course_content, get_module or get_topic_file. ' +
-        'Only files of that same course are allowed. Same text extraction as get_topic_file; pass save_to to keep the raw file.',
-      inputSchema: getCourseFileSchema.shape,
-    },
-    async (input: unknown) => handleGetCourseFile(deps, input),
-  );
-
-  server.registerTool(
-    'get_original_pdf',
-    {
-      title: 'Get Original OnQ PDF',
-      description:
-        'Return one complete, original lecture PDF from a file topic or a course-scoped content path. ' +
-        'Use list_my_courses and get_course_content first to locate slides. ' +
-        'The server does not extract text, render pages, or save the PDF. ' +
-        'If the host cannot inspect the attached PDF resource, explain that limitation to the user.',
-      inputSchema: getOriginalPdfSchema.shape,
+        'Return the complete original file bytes from OnQ as an attached MCP resource. ' +
+        'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
+        'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
+        'The server does not extract text or render pages. If this ChatGPT client cannot inspect the file type, say so.',
+      inputSchema: retrieveOnqFileSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
-    async (input: unknown) => handleGetOriginalPdf(deps, input),
+    async (input: unknown) => handleRetrieveOnqFile(deps, input),
   );
 
   server.registerTool(

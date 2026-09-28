@@ -51,6 +51,16 @@ profiles:
     expect(text).toContain('Smoke 101');
   });
 
+  it('exposes only the universal file retrieval path', async () => {
+    const names = (await client.listTools()).tools.map(t => t.name);
+    expect(names).toContain('find_onq_files');
+    expect(names).toContain('retrieve_onq_file');
+    expect(names).not.toContain('get_topic_file');
+    expect(names).not.toContain('get_course_file');
+    expect(names).not.toContain('get_original_pdf');
+    expect(names).not.toContain('submit_assignment');
+  });
+
   it('exposes the new clear_cache tool', async () => {
     const r = await client.callTool({ name: 'clear_cache', arguments: {} });
     const text = ((r.content as Array<{ text: string }>)[0])?.text ?? '';
@@ -97,12 +107,13 @@ profiles:
     expect(aText).toContain('Smoke Instructor');
     expect(aText).toContain('smoke.txt');
     const one = await client.callTool({ name: 'get_announcement', arguments: { course_id: 1, announcement_id: 900 } });
-    expect(((one.content as Array<{ text: string }>)[0])?.text ?? '').toContain('attachment_id=9001');
+    expect(((one.content as Array<{ text: string }>)[0])?.text ?? '').toContain('onq-file:announcement:1:900:9001');
     const file = await client.callTool({
-      name: 'get_announcement',
-      arguments: { course_id: 1, announcement_id: 900, attachment_id: 9001 },
+      name: 'retrieve_onq_file',
+      arguments: { file_ref: 'onq-file:announcement:1:900:9001' },
     });
-    expect(((file.content as Array<{ text: string }>)[0])?.text ?? '').toContain('smoke file');
+    const resource = (file.content as Array<{ type: string; resource?: { blob: string } }>)[1]?.resource;
+    expect(resource && Buffer.from(resource.blob, 'base64').toString('utf8')).toContain('smoke file');
     const c =await client.callTool({ name: 'get_calendar_events', arguments: { course_id: 1 } });
     expect(((c.content as Array<{ text: string }>)[0])?.text ?? '').toContain('Smoke Midterm');
   });

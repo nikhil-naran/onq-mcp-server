@@ -68,10 +68,10 @@ describe('D2lAssignmentRepository', () => {
     expect(result.instructions).toContain('Instructions here');
     expect(result.files).toHaveLength(1);
     expect(result.files[0]?.name).toBe('rubric.pdf');
-    expect(result.fileContents['rubric.pdf']).toMatch(/PDF/);
+    expect(result).not.toHaveProperty('fileContents');
   });
 
-  it('findFiles extracts the text of PDF and XLSX attachments', async () => {
+  it('findFiles lists PDF and XLSX attachments without downloading them', async () => {
     const folders = [{
       Id: 5001, Name: 'Lab 4', CustomInstructions: { Html: '' }, DueDate: null, Submissions: [],
       Attachments: [
@@ -87,8 +87,8 @@ describe('D2lAssignmentRepository', () => {
     const repo = new D2lAssignmentRepository(client, { le: '1.91' });
     const result = await repo.findFiles(OrgUnitId.of(101), AssignmentId.of(5001));
 
-    expect(result.fileContents['LabCS_4.pdf']).toContain('Objetivo del laboratorio');
-    expect(result.fileContents['datos.xlsx']).toContain('42');
+    expect(result.files.map(f => f.name)).toEqual(['LabCS_4.pdf', 'datos.xlsx']);
+    expect(result).not.toHaveProperty('fileContents');
   });
 
   it('findFiles falls back to dedicated attachments endpoint when list has none', async () => {
@@ -215,6 +215,6 @@ describe('D2lAssignmentRepository', () => {
 
     // Should not throw — corrupted ZIP/DOCX should return graceful fallback
     const result = await repo.findFiles(OrgUnitId.of(101), AssignmentId.of(5001));
-    expect(result.fileContents['hw.docx']).toMatch(/failed|DOCX|ZIP/i);
+    expect(result.files[0]?.name).toBe('hw.docx');
   });
 });

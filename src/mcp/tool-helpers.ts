@@ -249,7 +249,7 @@ export function courseContentToText(
   };
   walk(modules, 0);
   const footer = describedModules > 0
-    ? '\n\n_Read a module description in full with get_module(course_id, module_id); download linked /content/enforced/... files with get_course_file(course_id, path)._'
+    ? '\n\n_Read a module description in full with get_module(course_id, module_id); find file references with find_onq_files, then use retrieve_onq_file._'
     : '';
   return [ctx.md.h3(ctx.t('content.header')), lines.join('\n')].join('\n\n') + footer;
 }

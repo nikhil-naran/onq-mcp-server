@@ -65,10 +65,9 @@ The grading rubric attached to an assignment, rendered as one markdown table per
 ### `get_my_submissions`
 What you (or your group) turned in to an assignment, newest first: submission id, date, submitter, comment, and each file with its size. Works for open **and closed** folders: while a folder is open it reads `mysubmissions`; once it closes students get 403 there, so it reads the web UI submission history instead (`folders_history.d2l`, located through the folder list link).
 
-- `file_name` returns the content of that submitted file (newest version; pick an older one with `submission_id`) — PDF, DOCX, XLSX, PPTX, text, images, etc.
-- `save_to` downloads to a local directory. Without filters it saves only the latest submission; repeated names from older submissions are prefixed with their submission id instead of overwriting.
+Each submitted file has a `file_ref`. Pass it to `retrieve_onq_file` for the unchanged original bytes.
 
-**Args:** `course_id` *(integer)*, `assignment_id` *(integer)*, `submission_id` *(string, optional)*, `file_name` *(string, optional)*, `save_to` *(directory, optional)*.
+**Args:** `course_id` *(integer)*, `assignment_id` *(integer)*, `submission_id` *(string, optional)*.
 
 ### `get_roster` / `get_classlist_emails`
 Classmates and their emails.
@@ -82,7 +81,7 @@ The course overview (`GET /overview`) as plain text when the instructor publishe
 
 Many instructors never publish the overview (it returns 404) and upload the syllabus into course content instead. In that case the tool says so explicitly (`Brightspace course overview not published (404 or empty description)`) and lists up to 5 likely places, best first, each with the exact call that reads it:
 
-- topics or linked files whose **title or file name** contains a syllabus keyword (`syllabus`, `sílabo`, `programa del curso`, `programa`, `course outline`, `plan de curso`, `guía del curso`, `programme`, … — accents and case ignored, whole words only, so "programación" does not match) → `get_topic_file(course_id, topic_id)` / `get_course_file(course_id, path)`;
+- topics or linked files whose **title or file name** contains a syllabus keyword (`syllabus`, `sílabo`, `programa del curso`, `programa`, `course outline`, `plan de curso`, `guía del curso`, `programme`, … — accents and case ignored, whole words only, so "programación" does not match) → `retrieve_onq_file(file_ref)`;
 - links whose **anchor text** matches (e.g. "Programa Curso 2026-20" → `quickLink … type=coursefile` resolved to its `/content/enforced/…` path, "CHECK THE SYLLABUS HERE");
 - documents linked from a module titled like a syllabus, and such modules themselves → `get_module(course_id, module_id)`;
 - generic welcome/intro pages and modules ("Welcome", "Bienvenida", "Información general", "Presentación") as a last resort.
@@ -94,25 +93,20 @@ Module tree with topics, loaded with a single `GET /content/toc` call. Use this 
 
 **Args:** `course_id`, `depth` *(0–5, default 2)*.
 
-Each topic shows its real kind (`file`, `link`, `quiz`, `lti`, `dropbox`, `discussion`), its URL when it has one, and `[broken]` when Brightspace flags it as broken. Many courses keep their material in **module descriptions** rather than topics, so modules with a description also show a short excerpt (200 characters), up to 5 of the files/links it contains (session tokens stripped) and a `module_id=…` — call `get_module` for the full text and `get_course_file` for the linked `/content/enforced/...` files.
+Each topic shows its real kind (`file`, `link`, `quiz`, `lti`, `dropbox`, `discussion`), its URL when it has one, and `[broken]` when Brightspace flags it as broken. Many courses keep their material in **module descriptions** rather than topics, so modules with a description also show a short excerpt (200 characters), up to 5 of the files/links it contains (session tokens stripped) and a `module_id=…` — call `get_module` for the full text and `find_onq_files` for file references.
 
 ### `get_module`
 One module in full: the complete description text, every link or embedded file (anchors, iframes, `<object>`/`<embed>` media), its topics and its submodules.
 
 **Args:** `course_id`, `module_id` *(shown as `module_id=…` by `get_course_content`)*.
 
-### `get_course_file`
-Download and read a file stored in the course content area — the PDFs, slides and documents that HTML topics and module descriptions link or embed (`/content/enforced/{course_id}-…/file.pdf`).
+### `find_onq_files` / `retrieve_onq_file`
+Search files across current courses with `find_onq_files(query, course_id?, include_past?, limit?)`. Ranking uses course, module, topic, link, and filename metadata. It does not inspect file contents; a random filename may require opening several candidates from the right module.
 
-**Args:**
-- `course_id`, `path` *(both required)* — the path exactly as shown by `get_course_content`, `get_module` or `get_topic_file`. A full URL on your Brightspace host is accepted too.
-- `topic_id` *(optional)* — the HTML topic a **relative** link came from; the link is resolved against that topic's folder.
-- `save_to` *(optional)* — also write the raw file to disk.
-
-Only files of that same course are served: other courses' folders, other hosts, `..`/encoded traversal and non-`/content/enforced/` paths are refused with an error. Uses the same text extraction as `get_topic_file`. If Brightspace answers with an HTML page instead of the requested binary (typically an expired session), an explicit error is returned.
+Pass a returned `file_ref` to `retrieve_onq_file(file_ref)`. This one tool returns original PDF, PowerPoint, Markdown, Office, text, image, and other file bytes as an embedded MCP resource. It also handles assignment attachments, announcement attachments, and submitted files referenced by their listing tools. Files are limited to 25 MB. The server does not extract text, render pages, or save files. Whether ChatGPT can inspect a given file type must be tested in ChatGPT. Course paths are validated to prevent access to another course or host; sign-in pages are rejected.
 
 ### `get_announcements`
-News feed: pinned announcements first, then newest first. Each entry shows its `id`, date, author, a ~300 character excerpt (HTML entities decoded; when cut it says so and gives the `get_announcement` call for the full text) and its attachments (name, size, `attachment_id`). Hidden announcements are not shown.
+News feed: pinned announcements first, then newest first. Each entry shows its `id`, date, author, a ~300 character excerpt (HTML entities decoded; when cut it says so and gives the `get_announcement` call for the full text) and its attachments (name, size, `file_ref`). Hidden announcements are not shown.
 
 **Args:**
 - `course_id` *(integer, required)*
@@ -126,8 +120,8 @@ One announcement in full: body as readable text (paragraphs and list items on th
 **Args:**
 - `course_id` *(integer, required)*
 - `announcement_id` *(integer, required)* — from `get_announcements`
-- `attachment_id` *(integer, optional)* — return that attachment's content instead (PDF, Office, text… extracted like `get_topic_file`; images as image content). Downloaded from `/d2l/api/le/{v}/{ou}/news/{id}/attachments/{fileId}`.
-- `save_to` *(string, optional, requires `attachment_id`)* — also save the attachment to this file path.
+
+Each attachment has a `file_ref`; use `retrieve_onq_file` for its original bytes.
 
 ### `get_discussions`
 Forum threads.
@@ -144,34 +138,10 @@ Course calendar items visible to you (lectures, exams, due dates, content releas
 **Returns:** events sorted by start time, formatted in the configured `output.tz`/`output.locale`. All-day events show a date only; location and a short plain-text description (HTML stripped) are included when set. Uses `calendar/events/myEvents/` (paged) and falls back to `calendar/events/` on older tenants.
 
 ### `get_assignment_files`
-Download and read attachments posted on an assignment (instructions, templates).
+List attachments posted on an assignment (instructions, templates) without downloading them.
 
 **Args:** `course_id`, `assignment_id`.
-**Returns:** Extracted text for DOCX/XLSX/PDF; size info for binaries.
-
-### `get_topic_file`
-Download a single content topic file. Returns extracted text and optionally saves the binary to disk.
-
-**Args:**
-- `course_id`, `topic_id` *(both required)*
-- `save_to` *(string, optional — `~/...`, `%VAR%\...`, or absolute path)*
-
-If `save_to` is provided, the raw file binary is also written to disk and the response includes `[Saved to: /abs/path]`.
-
-**What comes back, by format:**
-
-| Format | Result |
-|---|---|
-| PDF | Text (line breaks kept) |
-| DOCX, XLSX/XLSM, PPTX | Text — detected from the zip central directory or the topic URL extension; PPTX in slide order |
-| HTML topic | Readable text; relative links resolved to `/content/enforced/...` paths usable with `get_course_file`; embedded iframes/media listed |
-| Plain text, CSV, JSON | Text with newlines preserved (JSON pretty-printed) |
-| Jupyter `.ipynb` | Markdown cells + fenced code cells (outputs omitted) |
-| PNG / JPEG / GIF / WebP | MCP `image` content (inline up to 4 MB) |
-| Audio / video / unknown binaries | Metadata only (type and size) — use `save_to` |
-| ZIP | List of entries |
-
-Text is capped at 40,000 characters and the response says so when it was truncated. Link, quiz-quicklink and LTI topics return their URL and a hint instead of a file; broken topics return an explicit message. The browser-rendered page is only used as a fallback for HTML topics without extractable text.
+**Returns:** Attachment names and `file_ref` values for `retrieve_onq_file`.
 
 ### `get_my_groups`
 List the groups you're enrolled in for a course, with member names.
@@ -287,8 +257,6 @@ In addition to tools, the server exposes Brightspace content as MCP Resources wi
 | Resource name | URI pattern | Returns |
 |---|---|---|
 | brightspace-syllabus | `brightspace://{courseId}/syllabus` | `text/plain` — HTML stripped, date formatted |
-| brightspace-content-topic | `brightspace://{courseId}/content/topics/{topicId}` | `text/plain` extracted with the shared extractor (PDF, Office, HTML, text), images as blobs, base64 fallback when there is no text (e.g. scanned PDFs) |
-| brightspace-assignment-files | `brightspace://{courseId}/assignments/{assignmentId}/files` | All attachments as text (one per file) |
 | brightspace-announcement | `brightspace://{courseId}/announcements/{announcementId}` | `text/plain` — HTML stripped |
 
 Use IDs from tools (`list_my_courses` → courseId, `get_assignments` → assignmentId, etc.) to construct URIs.

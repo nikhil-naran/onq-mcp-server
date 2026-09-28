@@ -80,7 +80,7 @@ describe('get_module', () => {
     expect(out).toContain('Videos del capítulo 3 sobre TCP y UDP.');
     expect(out).toContain('/content/enforced/101-202620_TEST1010_1/Transporte%20-%20Diap%2001%20480p.mov');
     expect(out).not.toContain('999-OLDCOURSE');
-    expect(out).toContain('get_course_file');
+    expect(out).toContain('retrieve_onq_file');
     nock.cleanAll();
   });
 

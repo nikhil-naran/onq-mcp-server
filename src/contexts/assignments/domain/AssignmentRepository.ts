@@ -28,7 +28,6 @@ export interface AssignmentFilesResult {
   assignmentName: string;
   instructions: string;
   files: AssignmentFile[];
-  fileContents: Record<string, string>;
 }
 
 export interface AssignmentRepository {
@@ -38,9 +37,7 @@ export interface AssignmentRepository {
   findRubrics(courseId: OrgUnitId, assignmentId: AssignmentId): Promise<Rubric[]>;
   findFiles(courseId: OrgUnitId, assignmentId: AssignmentId): Promise<AssignmentFilesResult>;
   /**
-   * Download the raw bytes of a single attachment. Used by tools that want
-   * to save the binary to disk; `findFiles` already returns extracted text
-   * for AI consumption.
+   * Download the raw bytes of a single attachment after metadata lookup.
    */
   findFileBinary(courseId: OrgUnitId, file: AssignmentFile): Promise<Buffer>;
   /**
