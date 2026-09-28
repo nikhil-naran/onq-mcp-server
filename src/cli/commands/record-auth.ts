@@ -50,7 +50,7 @@ interface YamlRoot {
 export async function runRecordAuth(opts: RecordAuthOptions): Promise<void> {
   const configPath = resolve(opts.config ?? Paths.configYaml());
   const profileName = opts.profile ?? 'default';
-  const saveMode = opts.saveTo ?? 'print';
+  const saveMode = opts.saveTo ?? 'keychain';
   const timeoutMs = (Number.parseFloat(opts.timeoutMin ?? '10') || 10) * 60_000;
 
   // Load existing config (or start with a stub if missing)
@@ -122,7 +122,7 @@ export async function runRecordAuth(opts: RecordAuthOptions): Promise<void> {
         const cookieFile = resolve(homedir(), '.brightspace-mcp', `cookies-${profileName}.txt`);
         mkdirSync(dirname(cookieFile), { recursive: true });
         writeFileSync(cookieFile, cookieHeader, { encoding: 'utf8', mode: 0o600 });
-        cookieRef = `file:${cookieFile}`;
+        cookieRef = `cookiefile:${cookieFile}`;
         process.stdout.write(`  Saved to ${cookieFile} (mode 0600)\n`);
         break;
       }
@@ -140,7 +140,7 @@ export async function runRecordAuth(opts: RecordAuthOptions): Promise<void> {
           const cookieFile = resolve(homedir(), '.brightspace-mcp', `cookies-${profileName}.txt`);
           mkdirSync(dirname(cookieFile), { recursive: true });
           writeFileSync(cookieFile, cookieHeader, { encoding: 'utf8', mode: 0o600 });
-          cookieRef = `file:${cookieFile}`;
+          cookieRef = `cookiefile:${cookieFile}`;
         }
         break;
       }
@@ -173,7 +173,7 @@ export async function runRecordAuth(opts: RecordAuthOptions): Promise<void> {
     writeFileSync(configPath, stringifyYaml(yaml), { encoding: 'utf8', mode: 0o600 });
     process.stdout.write(`  Updated ${configPath} → strategy: session_cookie, cookie_ref: ${cookieRef}\n`);
     process.stdout.write(`\n  Done. Test with: brightspace-mcp auth --test --profile ${profileName}\n`);
-    process.stdout.write(`  Cookies expire in ~1 hour. Re-run this command when auth fails.\n`);
+    process.stdout.write(`  Session lifetime is controlled by your institution. Re-run this command when auth fails.\n`);
   } finally {
     await browser.close();
   }

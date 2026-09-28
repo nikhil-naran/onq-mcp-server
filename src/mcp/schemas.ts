@@ -140,3 +140,6 @@ export const getTopicFileSchema = z.object({
   ),
 }).strict();
 export type GetTopicFileInputSchema = z.infer<typeof getTopicFileSchema>;
+
+export const onqCourseSchema = z.object({ course_id: z.number().int().positive() });
+export const onqAssignmentSchema = onqCourseSchema.extend({ assignment_id: z.number().int().positive() });

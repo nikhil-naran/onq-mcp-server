@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OnQ agenda</title><style>
+:root{color-scheme:light dark;--paper:#fff;--ink:#17283c;--muted:#59687b;--line:#dfe6ed;--accent:#174b75;--soft:#eef5fb;--warn:#744900}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 'Segoe UI',system-ui,sans-serif}main{padding:28px;max-width:850px;margin:auto}header{display:flex;align-items:center;gap:16px;margin-bottom:24px}.mark{background:var(--accent);color:#fff;border-radius:50%;width:44px;height:44px;display:grid;place-items:center;font-weight:700;font-size:21px}h1{font-size:27px;font-weight:650;letter-spacing:-.7px;margin:0}#updated{color:var(--muted);font-size:13px;margin:2px 0 0}.filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}label{font-size:13px;color:var(--muted)}select{display:block;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:9px 28px 9px 10px;font:inherit;margin-top:4px;max-width:280px}select:focus-visible,a:focus-visible{outline:3px solid #799fc4;outline-offset:3px}#warnings{color:var(--warn);background:#fff4d9;border-radius:8px;padding:12px 16px;margin:0 0 20px}#warnings[hidden]{display:none}ul{padding:0;margin:0;list-style:none}li{display:grid;grid-template-columns:80px 1fr;gap:18px;padding:17px 0;border-top:1px solid var(--line)}time{font-weight:650;color:var(--accent)}time small{display:block;font-weight:400;color:var(--muted);margin-top:2px}.course{color:var(--muted);font-size:12px;display:block;margin-bottom:3px}.title{font-size:16px;font-weight:600;color:var(--ink);text-decoration:none}.title:hover{text-decoration:underline}.kind{font-size:12px;color:var(--accent);display:block;margin-top:6px}#empty{padding:22px;background:var(--soft);border-radius:8px;color:var(--muted)}footer{margin-top:20px;font-size:12px;color:var(--muted)}@media(prefers-color-scheme:dark){:root{--paper:#18232f;--ink:#edf3f9;--muted:#afbecd;--line:#354454;--accent:#a1c8eb;--soft:#243547;--warn:#f1d58f}.mark{background:#285b86;color:white}#warnings{background:#40351c}}@media(max-width:480px){main{padding:18px}li{grid-template-columns:66px 1fr;gap:12px}select{max-width:230px}}
+</style></head><body><main><header><span class="mark" aria-hidden="true">Q</span><div><h1>Your course agenda</h1><p id="updated">Waiting for course information</p></div></header><div class="filters"><label>Course<select id="course"><option value="all">All courses</option></select></label><label>Show<select id="kind"><option value="all">Everything</option><option value="assignment_due">Assignments</option><option value="quiz_closes">Quiz closing times</option><option value="calendar_event">Calendar events</option></select></label></div><div id="warnings" role="status" hidden></div><ul id="entries" aria-label="Upcoming course dates"></ul><p id="empty">Ask ChatGPT to show your OnQ agenda.</p><footer>Times shown in <span id="zone">your timezone</span>. Calendar events and quiz closing times may also appear as assignment reminders.</footer></main><script>
+let data=null;
+const $=id=>document.getElementById(id);
+const labels={assignment_due:'Assignment due',quiz_closes:'Quiz closes',calendar_event:'Calendar event'};
+function render(){
+ if(!data)return;
+ const zone=data.timezone||'America/Toronto';$('zone').textContent=zone;
+ const rows=data.entries.filter(e=>($('course').value==='all'||String(e.courseId)===$('course').value)&&($('kind').value==='all'||e.kind===$('kind').value));
+ $('entries').replaceChildren();
+ for(const e of rows){
+  const date=new Date(e.at);if(!Number.isFinite(date.getTime()))continue;
+  const li=document.createElement('li'),t=document.createElement('time'),small=document.createElement('small'),body=document.createElement('div'),course=document.createElement('span'),title=document.createElement('a'),kind=document.createElement('span');
+  t.dateTime=e.at;t.textContent=date.toLocaleDateString('en-CA',{month:'short',day:'numeric',timeZone:zone});small.textContent=date.toLocaleTimeString('en-CA',{hour:'numeric',minute:'2-digit',timeZone:zone});t.append(small);
+  course.className='course';course.textContent=e.course;title.className='title';title.textContent=e.title;
+  try{const u=new URL(e.url);if(u.origin==='https://onq.queensu.ca'){title.href=u.href;title.target='_blank';title.rel='noopener noreferrer'}}catch{}
+  kind.className='kind';kind.textContent=labels[e.kind]||'Course date';body.append(course,title,kind);li.append(t,body);$('entries').append(li);
+ }
+ $('empty').hidden=rows.length>0;$('empty').textContent=data.warnings.length?'No matching entries retrieved. Some course information is unavailable.':'No upcoming entries match these filters.';
+}
+function receive(result){
+ const next=result?.structuredContent||result;if(!next||!Array.isArray(next.entries))return;
+ data={...next,warnings:Array.isArray(next.warnings)?next.warnings:[]};
+ const selected=$('course').value;$('course').replaceChildren(new Option('All courses','all'));
+ for(const [id,name] of new Map(data.entries.map(e=>[String(e.courseId),String(e.course)])))$('course').add(new Option(name,id));
+ if([...$('course').options].some(o=>o.value===selected))$('course').value=selected;
+ $('warnings').hidden=!data.warnings.length;$('warnings').textContent=data.warnings.join(' ');
+ $('updated').textContent='Retrieved '+new Date(data.retrievedAt).toLocaleString('en-CA',{timeZone:data.timezone||'America/Toronto'});render();
+}
+$('course').onchange=render;$('kind').onchange=render;
+window.addEventListener('message',event=>{
+ if(event.source!==window.parent)return;
+ const m=event.data;if(!m||m.jsonrpc!=='2.0')return;
+ if(m.id===1&&m.result)window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized',params:{}},'*');
+ if(m.method==='ui/notifications/tool-result')receive(m.params);
+});
+window.parent.postMessage({jsonrpc:'2.0',id:1,method:'ui/initialize',params:{protocolVersion:'2026-01-26',appInfo:{name:'onq-agenda',version:'1.0.0'},appCapabilities:{}}},'*');
+if(window.openai?.toolOutput)receive(window.openai.toolOutput);
+</script></body></html>

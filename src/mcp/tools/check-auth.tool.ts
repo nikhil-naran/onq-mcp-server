@@ -14,7 +14,7 @@ export async function handleCheckAuth(deps: CheckAuthDeps) {
       content: [
         {
           type: 'text' as const,
-          text: `Authenticated as ${session.userIdentity.displayName}. Source: ${session.source}. Expires in ~${minutes} min.`,
+          text: `Authenticated as ${session.userIdentity.displayName}. Source: ${session.source}. Local session cache rechecks in ~${minutes} min; the institution controls actual session expiry.`,
         },
       ],
     };

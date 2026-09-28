@@ -4,7 +4,7 @@ import { join } from 'node:path';
 const ROOT_DIR_NAME = '.brightspace-mcp';
 
 function root(): string {
-  return join(homedir(), ROOT_DIR_NAME);
+  return process.env['ONQ_DATA_DIR'] || join(homedir(), ROOT_DIR_NAME);
 }
 
 export const Paths = {

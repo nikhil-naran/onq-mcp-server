@@ -62,7 +62,7 @@ export class D2lQuizRepository implements QuizRepository {
     const response = await this.client.get<QuizListResponse>(
       `/d2l/api/le/${this.versions.le}/${orgUnit}/quizzes/`,
     );
-    const dtos = response.Objects ?? [];
+    const dtos = Array.isArray(response) ? response as QuizDto[] : response.Objects ?? [];
     return dtos
       .filter((dto): dto is QuizDto & { QuizId: number; Name: string } =>
         typeof dto.QuizId === 'number' && typeof dto.Name === 'string',

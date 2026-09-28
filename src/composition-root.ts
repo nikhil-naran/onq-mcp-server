@@ -1,3 +1,6 @@
+import { D2lOnqRepository } from '@/contexts/onq/infrastructure/D2lOnqRepository.js';
+import { InteractiveBrowserStrategy } from '@/contexts/authentication/infrastructure/strategies/InteractiveBrowserStrategy.js';
+import { CookieFileCredentialStore } from '@/contexts/authentication/infrastructure/credential-stores/CookieFileCredentialStore.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -126,7 +129,7 @@ async function buildCredentialStore(
           throw new Error('file: store not configured');
         },
       };
-  return new CompositeCredentialStore({ env, keychain, file });
+  return new CompositeCredentialStore({ env, keychain, file, cookieFile: new CookieFileCredentialStore() });
 }
 
 function buildMfa(
@@ -237,6 +240,14 @@ async function buildStrategies(
   const out: Partial<Record<AuthStrategyKind, AuthStrategy>> = {};
   const whoami = (token: Parameters<typeof callWhoAmI>[0]) => callWhoAmI(token, baseUrl, lpVersion);
 
+  if (profile.auth.interactive) {
+    out.interactive = new InteractiveBrowserStrategy({
+      profileDir: profile.auth.interactive.profile_dir,
+      timeoutMs: profile.auth.interactive.login_timeout_seconds * 1000,
+      sessionTtlMs: profile.auth.interactive.session_ttl_seconds * 1000,
+      whoami,
+    });
+  }
   if (profile.auth.api_token) {
     out.api_token = new ApiTokenStrategy({
       tokenRef: profile.auth.api_token.token_ref,
@@ -393,7 +404,7 @@ export async function buildDependencies(input: BuildDependenciesInput): Promise<
   // JS-rendered page scraping. The renderer keeps a reusable browser singleton
   // so consecutive renders skip the Chromium launch cost.
   let pageRenderer: PlaywrightPageRenderer | undefined;
-  if (profile.auth.browser) {
+  if (profile.auth.browser || profile.auth.interactive) {
     const r = new PlaywrightPageRenderer(playwrightLoader, getToken, baseUrl);
     pageRenderer = r;
     disposables.add(() => r.dispose());
@@ -513,6 +524,7 @@ export async function buildDependencies(input: BuildDependenciesInput): Promise<
   });
 
   return {
+    onqRepo: new D2lOnqRepository(apiClient, versions.le, baseUrl),
     ensureAuth,
     profile: profileName,
     baseUrl,

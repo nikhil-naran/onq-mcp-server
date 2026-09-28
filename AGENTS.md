@@ -1,5 +1,9 @@
 # AGENTS.md — Project map for AI assistants & humans
 
+## Nikhil's Windows handoff
+
+If you are setting this up on Nikhil's Windows computer, follow [docs/onq/WINDOWS-HANDOFF.md](docs/onq/WINDOWS-HANDOFF.md) and [docs/onq/SETUP.md](docs/onq/SETUP.md) first. This is a personal OnQ adaptation. The generic install and auth guidance below describes the upstream Brightspace project and must not replace the Windows scripts or the Queen's interactive login. Keep LMS writes disabled and keep credentials, cookies, and tunnel keys out of the repository and chat.
+
 > Map of the `brightspace-mcp` repository. Read this first if you've never touched the project.
 > Standard format ([agentsmd.org](https://agentsmd.org)) — works with Claude Code, Cursor, Codex, Gemini CLI, Aider.
 

@@ -57,3 +57,6 @@ secrets/
 .claude/*
 !.claude/CLAUDE.md
 .superpowers/
+
+# Local visual verification output
+/artifacts/

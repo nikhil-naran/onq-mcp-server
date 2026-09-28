@@ -63,14 +63,31 @@ export async function handleGetTopicFile(deps: GetTopicFileDeps, rawInput: unkno
 
   // For PDFs: extract text directly from the binary
   if (contentType === 'application/pdf') {
+    const parser = new PDFParse({ data: new Uint8Array(buf) });
+    const content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string; text?: never }> = [];
     try {
-      const parser = new PDFParse({ data: buf });
-      const result = await parser.getText();
-      await parser.destroy();
-      const text = result.text.replace(/\s+/g, ' ').trim().slice(0, 12000);
-      if (text) return { content: [{ type: 'text' as const, text: text + savedNote }] };
-    } catch { /* fall through to size report */ }
-    return { content: [{ type: 'text' as const, text: `[PDF — ${buf.length} bytes, text extraction failed]${savedNote}` }] };
+      const result = await parser.getText({ first: 50 });
+      const text = result.text.trim();
+      content.push({ type: 'text', text: `PDF (${buf.length} bytes; ${result.total} pages). Reading up to 50 pages.\n${text.slice(0, 60000)}${text.length > 60000 ? '\n[Text truncated at 60,000 characters.]' : ''}${savedNote}` });
+      if (text.length / Math.max(1, Math.min(50, result.total)) < 200) {
+        try {
+          const screenshots = await parser.getScreenshot({ first: 5, desiredWidth: 1000, imageBuffer: true, imageDataUrl: false });
+          let bytes = 0;
+          for (const page of screenshots.pages) {
+            bytes += page.data.length;
+            if (bytes > 6 * 1024 * 1024) break;
+            content.push({ type: 'text', text: `PDF page ${page.pageNumber}` });
+            content.push({ type: 'image', data: Buffer.from(page.data).toString('base64'), mimeType: 'image/png' });
+          }
+          content.push({ type: 'text', text: 'Visual preview is limited to the first 5 pages and 6 MB. Open the source document for remaining pages.' });
+        } catch {
+          content.push({ type: 'text', text: 'PDF image preview unavailable; sparse extracted text may omit diagrams. Open the source document.' });
+        }
+      }
+      return { content };
+    } catch {
+      return { content: [{ type: 'text' as const, text: `[PDF — ${buf.length} bytes, text extraction failed]${savedNote}` }] };
+    } finally { await parser.destroy().catch(() => {}); }
   }
 
   // For unrecognized binary (D2L internal format), fall back to Playwright-rendered view URL

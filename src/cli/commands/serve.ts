@@ -46,7 +46,8 @@ export async function checkForUpdate(): Promise<void> {
 }
 
 export async function runServe(opts: ServeOptions): Promise<void> {
-  void checkForUpdate(); // fire-and-forget; never await
+  // Fork updates are reviewed against upstream; do not suggest replacing this build.
+  // void checkForUpdate(); // fire-and-forget; never await
   const path = opts.config ?? Paths.configYaml();
   const fileContent = existsSync(path) ? readFileSync(path, 'utf-8') : null;
 

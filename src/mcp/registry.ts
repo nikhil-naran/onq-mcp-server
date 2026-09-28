@@ -1,3 +1,7 @@
+import { registerAgenda } from './ui/registerAgenda.js';
+import type { OnqRepository } from '@/contexts/onq/domain/OnqRepository.js';
+import { onqCourseSchema, onqAssignmentSchema } from './schemas.js';
+import { handleOnqAssignment, handleOnqCompletions } from './tools/onq.tool.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   checkAuthSchema,
@@ -71,7 +75,7 @@ export interface ToolDeps
     GetDiagnosticsDeps,
     GetMyGradesDeps,
     GetAssignmentsDeps,
-    GetUpcomingDueDatesDeps,
+    Omit<GetUpcomingDueDatesDeps, 'baseUrl' | 'quizRepo' | 'calendarRepo'>,
     GetFeedbackDeps,
     GetRosterDeps,
     GetClasslistEmailsDeps,
@@ -88,6 +92,7 @@ export interface ToolDeps
     GetMyGroupsDeps,
     SearchCourseDeps,
     ListNotificationsDeps {
+  onqRepo?: OnqRepository;
   writesGate: WritesGate;
   idempotencyStore: IdempotencyStore;
   auditLogger: AuditLogger;
@@ -95,6 +100,22 @@ export interface ToolDeps
 }
 
 export function registerAllTools(server: McpServer, deps: ToolDeps): void {
+  if (deps.onqRepo) {
+    registerAgenda(server, deps);
+    const repo = deps.onqRepo;
+    server.registerTool('get_assignment_details', {
+      title: 'Read assignment instructions and rubrics',
+      description: 'Read full assignment metadata and visible rubric criteria. Also use get_assignment_files for attachments. Report warnings about unavailable rubrics.',
+      inputSchema: onqAssignmentSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    }, input => handleOnqAssignment(repo, input));
+    server.registerTool('get_content_completions', {
+      title: 'Read course completion status',
+      description: 'Read recorded topic completion status. Unavailable data means unknown, not incomplete.',
+      inputSchema: onqCourseSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    }, input => handleOnqCompletions(repo, input));
+  }
   server.registerTool(
     'check_auth',
     {

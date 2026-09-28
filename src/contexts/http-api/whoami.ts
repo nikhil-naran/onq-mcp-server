@@ -23,11 +23,15 @@ export async function callWhoAmI(
   const resp = await fetch(
     `${baseUrl.replace(/\/$/, '')}/d2l/api/lp/${lpVersion}/users/whoami`,
     {
-      headers: { [name]: value },
+      headers: { [name]: value, Accept: 'application/json' },
+      redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
     },
   );
-  if (!resp.ok) throw new Error(`whoami failed: ${resp.status}`);
+  if ((resp.status >= 300 && resp.status < 400) || resp.headers.get('content-type')?.includes('text/html')) {
+    throw Object.assign(new Error('whoami needs sign-in'), { status: 401 });
+  }
+  if (!resp.ok) throw Object.assign(new Error(`whoami failed: ${resp.status}`), { status: resp.status });
   const body = (await resp.json()) as WhoAmIResponse;
   const userId = Number.parseInt(body.Identifier, 10);
   if (!Number.isInteger(userId) || userId <= 0) {

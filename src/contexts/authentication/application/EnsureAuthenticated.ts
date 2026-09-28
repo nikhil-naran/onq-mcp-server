@@ -35,12 +35,22 @@ class AggregateAuthError extends Error {
 }
 
 export class EnsureAuthenticated {
+  private readonly pending = new Map<string, Promise<Session>>();
   constructor(
     private readonly cache: SessionCache,
     private readonly resolverOrStrategy: ConfigBackedStrategyResolver | AuthStrategy,
   ) {}
 
   async execute(ctx: AuthContext): Promise<Session> {
+    const key = `${ctx.baseUrl}:${ctx.profile}`;
+    const running = this.pending.get(key);
+    if (running) return running;
+    const task = this.authenticateOnce(ctx).finally(() => this.pending.delete(key));
+    this.pending.set(key, task);
+    return task;
+  }
+
+  private async authenticateOnce(ctx: AuthContext): Promise<Session> {
     const cached = await this.cache.get(ctx.profile);
     if (cached) return cached;
 

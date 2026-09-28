@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const AuthStrategyKindSchema = z.enum([
   'auto',
+  'interactive',
   'api_token',
   'browser',
   'oauth',
@@ -129,6 +130,11 @@ export const ProfileSchema = z.object({
       strategy: AuthStrategyKindSchema.default('auto'),
       fallbacks: z.array(AuthStrategyKindSchema).default([]),
       api_token: z.object({ token_ref: z.string() }).optional(),
+      interactive: z.object({
+        profile_dir: z.string(),
+        login_timeout_seconds: z.number().int().min(10).max(600).default(120),
+        session_ttl_seconds: z.number().int().positive().default(3600),
+      }).optional(),
       browser: BrowserStrategyConfigSchema.optional(),
       oauth: OAuthStrategyConfigSchema.optional(),
       session_cookie: SessionCookieStrategyConfigSchema.optional(),
@@ -136,6 +142,9 @@ export const ProfileSchema = z.object({
     })
     .superRefine((auth, ctx) => {
       const k = auth.strategy;
+      if (k === 'interactive' && !auth.interactive) {
+        ctx.addIssue({ code: 'custom', message: 'auth.interactive is required' });
+      }
       if (k === 'api_token' && !auth.api_token) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

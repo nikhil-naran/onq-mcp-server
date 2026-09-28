@@ -1,7 +1,7 @@
 import type { AccessToken } from './AccessToken.js';
 import type { UserIdentity } from './UserIdentity.js';
 
-export type AuthStrategyKind = 'api_token' | 'browser' | 'oauth' | 'session_cookie' | 'headless';
+export type AuthStrategyKind = 'api_token' | 'browser' | 'oauth' | 'session_cookie' | 'headless' | 'interactive';
 
 export interface Session {
   readonly token: AccessToken;

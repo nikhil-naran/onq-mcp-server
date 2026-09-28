@@ -134,7 +134,7 @@ export class D2lAssignmentRepository implements AssignmentRepository {
         firstError ??= r.reason;
       }
     }
-    if (assignments.length === 0 && firstError) throw firstError;
+    if (firstError) throw firstError;
     return assignments;
   }
 

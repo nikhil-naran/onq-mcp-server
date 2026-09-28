@@ -34,7 +34,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc && tsc-alias && node -e \"const {cpSync}=require('fs');cpSync('src/shared-kernel/output/i18n/catalogs','build/shared-kernel/output/i18n/catalogs',{recursive:true})\"",
+    "build": "tsc && tsc-alias && node -e \"const {cpSync}=require('fs');cpSync('src/shared-kernel/output/i18n/catalogs','build/shared-kernel/output/i18n/catalogs',{recursive:true})\" && node -e \"const {cpSync}=require('fs');cpSync('src/mcp/ui/agenda.html','build/mcp/ui/agenda.html')\"",
     "build:clean": "rm -rf build && npm run build",
     "dev": "tsc --watch",
     "start": "node build/cli/main.js serve",
@@ -91,5 +91,6 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "private": true
 }

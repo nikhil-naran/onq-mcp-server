@@ -71,10 +71,10 @@ describe('runRecordAuth', () => {
     };
     expect(cfg.default_profile).toBe('default');
     expect(cfg.profiles.default.auth?.strategy).toBe('session_cookie');
-    expect(cfg.profiles.default.auth?.session_cookie?.cookie_ref).toMatch(/^file:/);
+    expect(cfg.profiles.default.auth?.session_cookie?.cookie_ref).toMatch(/^cookiefile:/);
 
     // Cookie file exists and contains the captured value (filtered to school.example.com)
-    const cookiePath = cfg.profiles.default.auth!.session_cookie!.cookie_ref!.replace(/^file:/, '');
+    const cookiePath = cfg.profiles.default.auth!.session_cookie!.cookie_ref!.replace(/^cookiefile:/, '');
     expect(existsSync(cookiePath)).toBe(true);
     const cookieHeader = readFileSync(cookiePath, 'utf8');
     expect(cookieHeader).toContain('d2lSessionVal=fake-session');

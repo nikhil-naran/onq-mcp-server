@@ -8,12 +8,14 @@ export interface CompositeCredentialStoreOptions {
   env: CredentialStore;
   keychain: CredentialStore;
   file: CredentialStore;
+  cookieFile?: CredentialStore;
 }
 
 export class CompositeCredentialStore implements CredentialStore {
   constructor(private readonly stores: CompositeCredentialStoreOptions) {}
 
   private pick(key: CredentialKey): CredentialStore {
+    if (key.startsWith('cookiefile:') && this.stores.cookieFile) return this.stores.cookieFile;
     if (key.startsWith('env:')) return this.stores.env;
     if (key.startsWith('keychain:')) return this.stores.keychain;
     if (key.startsWith('file:')) return this.stores.file;

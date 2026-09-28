@@ -165,8 +165,10 @@ export class D2lApiClient {
   }
 
   async getRaw(path: string): Promise<Buffer> {
-    const token = await this.opts.getToken();
-    return this.withMiddlewares(() => this.fetchBinary(path, token));
+    return this.withAuthRefresh(async () => {
+      const token = await this.opts.getToken();
+      return this.withMiddlewares(() => this.fetchBinary(path, token));
+    });
   }
 
   async getRenderedHtml(path: string): Promise<string> {
@@ -217,7 +219,7 @@ export class D2lApiClient {
     let response: Response;
     const start = this.metrics ? performance.now() : 0;
     try {
-      response = await fetch(url, {
+      response = await this.fetchDownload(url, {
         method: 'GET',
         headers: { [name]: value, 'User-Agent': this.userAgent },
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -233,7 +235,40 @@ export class D2lApiClient {
       const body = await response.text().catch(() => '');
       throw classifyD2lError(new D2lApiError(response.status, path, body));
     }
-    return Buffer.from(await response.arrayBuffer());
+    const maxBytes = 25 * 1024 * 1024;
+    if (Number(response.headers.get('content-length')) > maxBytes) {
+      await response.body?.cancel();
+      throw new Error('Download exceeds 25 MB limit');
+    }
+    const reader = response.body?.getReader();
+    if (!reader) return Buffer.alloc(0);
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxBytes) throw new Error('Download exceeds 25 MB limit');
+        chunks.push(value);
+      }
+    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    return Buffer.concat(chunks);
+  }
+
+  private async fetchDownload(url: string, init: RequestInit): Promise<Response> {
+    const origin = new URL(this.baseUrl).origin;
+    for (let hops = 0; hops < 6; hops++) {
+      if (new URL(url).origin !== origin) throw new Error('Download redirects outside the LMS are not supported');
+      this.transport.validate(url);
+      const response = await fetch(url, { ...init, redirect: 'manual' });
+      if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+      const location = response.headers.get('location');
+      await response.body?.cancel();
+      if (!location) throw new Error('Download redirect has no destination');
+      url = new URL(location, url).href;
+    }
+    throw new Error('Too many download redirects');
   }
 
   async postMultipart<T>(path: string, formData: FormData): Promise<T> {
