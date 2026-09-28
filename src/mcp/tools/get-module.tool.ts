@@ -27,6 +27,8 @@ export async function handleGetModule(deps: GetModuleDeps, rawInput: unknown) {
         type: 'text' as const,
         text: `Module ${input.module_id} not found in course ${input.course_id}. Use get_course_content to list module ids.`,
       }],
+      structuredContent: { status: 'unavailable', error_code: 'not_found', course_id: input.course_id,
+        module_id: input.module_id, retrieved_at: new Date().toISOString() },
     };
   }
 
@@ -55,5 +57,9 @@ export async function handleGetModule(deps: GetModuleDeps, rawInput: unknown) {
   const hint = text.includes('/content/enforced/')
     ? '\n\n_Find linked files and topics with find_onq_files, then use retrieve_onq_file for original bytes._'
     : '';
-  return { content: [{ type: 'text' as const, text: text + hint }] };
+  return { content: [{ type: 'text' as const, text: text + hint }], structuredContent: {
+    status: 'ok', course_id: input.course_id, module_id: module.id, title: module.title,
+    topics: module.topics.map(t => ({ topic_id: t.id, title: t.title, kind: t.kind, is_broken: t.isBroken })),
+    submodules: module.submodules.map(m => ({ module_id: m.id, title: m.title })), retrieved_at: new Date().toISOString(),
+  } };
 }

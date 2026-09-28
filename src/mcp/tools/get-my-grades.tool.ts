@@ -16,5 +16,10 @@ export async function handleGetMyGrades(deps: GetMyGradesDeps, rawInput: unknown
   const text = input.format === 'detailed' ? gradesToDetailed(grades, deps.output) : gradesToCompact(grades, deps.output);
   const footer = deps.output.metaFooter();
   const body = footer ? `${text}\n\n${footer}` : text;
-  return { content: [{ type: 'text' as const, text: body }] };
+  return { content: [{ type: 'text' as const, text: body }], structuredContent: {
+    status: 'ok', course_id: input.course_id,
+    items: grades.map(g => ({ grade_item_id: g.itemId, title: g.itemName,
+      points_earned: g.pointsEarned, points_max: g.pointsMax, percent: g.percent,
+      displayed_grade: g.displayedGrade })), retrieved_at: new Date().toISOString(),
+  } };
 }

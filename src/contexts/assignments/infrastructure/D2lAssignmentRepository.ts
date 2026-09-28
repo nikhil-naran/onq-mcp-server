@@ -562,17 +562,14 @@ export class D2lAssignmentRepository implements AssignmentRepository {
     const folder = await this.getFolder(orgUnit, fid);
     const embedded = folder?.Assessment?.Rubrics;
     if (embedded && embedded.length > 0) return embedded.map(toRubric);
-    // Some tenants/versions omit Rubrics from the folder payload — ask the
-    // rubrics endpoint directly.
-    try {
-      const list = await this.client.get<RubricDto[]>(
-        `/d2l/api/le/${this.versions.le}/${orgUnit}/rubrics?objectType=Dropbox&objectId=${fid}`,
-      );
-      return Array.isArray(list) ? list.map(toRubric) : [];
-    } catch (err) {
-      if (err instanceof D2lApiError && (err.status === 403 || err.status === 404)) return [];
-      throw err;
-    }
+    // Use the same assignment-association evidence as get_assignment_details.
+    // A denied association read cannot establish that no rubric is attached.
+    const associations = await this.client.get<Array<{ RubricId: number; IsHidden?: boolean }>>(
+      `/d2l/api/le/${this.versions.le}/${orgUnit}/dropbox/folders/${fid}/rubrics/`,
+    );
+    return Promise.all(associations.filter(a => !a.IsHidden).map(async a => toRubric(
+      await this.client.get<RubricDto>(`/d2l/api/le/${this.versions.le}/${orgUnit}/rubrics/${a.RubricId}/`),
+    )));
   }
 
   private async getFolder(orgUnit: number, fid: number): Promise<FolderDto | null> {

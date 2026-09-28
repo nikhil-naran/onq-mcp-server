@@ -89,6 +89,18 @@ describe('universal OnQ file retrieval', () => {
     expect(result).toHaveProperty('isError', true);
   });
 
+  it('reports denied and oversized downloads with distinct error codes', async () => {
+    const repo = new FakeContentRepository();
+    const binary = vi.spyOn(repo, 'findTopicFile').mockRejectedValueOnce(new D2lApiError(403, '/file', '{}'))
+      .mockRejectedValueOnce(new Error('Download exceeds 25 MB limit'));
+    const deps = { contentRepo: repo, assignmentRepo: {} as never,
+      communicationsRepo: {} as never, baseUrl: 'https://onq.queensu.ca' };
+    const ref = encodeOnqFileRef({ source: 'topic', courseId: 101, topicId: 8 });
+    expect((await handleRetrieveOnqFile(deps, { file_ref: ref })).structuredContent).toMatchObject({ error_code: 'forbidden' });
+    expect((await handleRetrieveOnqFile(deps, { file_ref: ref })).structuredContent).toMatchObject({ error_code: 'too_large' });
+    expect(binary).toHaveBeenCalledTimes(2);
+  });
+
   it('lists attachment references and retrieves the original only when requested', async () => {
     const assignmentRepo = new FakeAssignmentRepository();
     const binary = Buffer.from('raw attachment bytes');

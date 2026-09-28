@@ -5,6 +5,7 @@ import type { ContentRepository } from '@/contexts/content/domain/ContentReposit
 import type { Module } from '@/contexts/content/domain/Module.js';
 import { htmlToPlainText } from '@/shared-kernel/text/htmlLinks.js';
 import { createOrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
+import { D2lApiError } from '@/contexts/http-api/errors.js';
 
 export const searchCourseSchema = z.object({
   course_id: z.number().int().positive(),
@@ -92,6 +93,12 @@ export async function handleSearchCourse(deps: SearchCourseDeps, rawInput: unkno
   const queryTerms = tokenize(input.query);
 
   const hits: Hit[] = [];
+  const coverage: Array<{ source: 'content' | 'announcements' | 'discussions'; status: 'ok' | 'forbidden' | 'not_found' | 'unavailable' }> = [];
+  const failed = (source: typeof coverage[number]['source'], err: unknown) => {
+    const status = err instanceof D2lApiError && err.status === 403 ? 'forbidden'
+      : err instanceof D2lApiError && err.status === 404 ? 'not_found' : 'unavailable';
+    coverage.push({ source, status });
+  };
 
   // Content
   if (input.scope.includes('content')) {
@@ -122,7 +129,8 @@ export async function handleSearchCourse(deps: SearchCourseDeps, rawInput: unkno
           }
         }
       }
-    } catch { /* skip if content fails */ }
+      coverage.push({ source: 'content', status: 'ok' });
+    } catch (err) { failed('content', err); }
   }
 
   // Announcements
@@ -142,7 +150,8 @@ export async function handleSearchCourse(deps: SearchCourseDeps, rawInput: unkno
           });
         }
       }
-    } catch { /* skip */ }
+      coverage.push({ source: 'announcements', status: 'ok' });
+    } catch (err) { failed('announcements', err); }
   }
 
   // Discussions
@@ -164,11 +173,15 @@ export async function handleSearchCourse(deps: SearchCourseDeps, rawInput: unkno
           }
         }
       }
-    } catch { /* skip */ }
+      coverage.push({ source: 'discussions', status: 'ok' });
+    } catch (err) { failed('discussions', err); }
   }
 
+  const failures = coverage.filter(c => c.status !== 'ok');
+  const status = failures.length === coverage.length && coverage.length > 0 ? 'unavailable' : failures.length ? 'partial' : 'ok';
   if (hits.length === 0) {
-    return { content: [{ type: 'text' as const, text: `No matches for "${input.query}".` }] };
+    return { content: [{ type: 'text' as const, text: `No matches for "${input.query}" in the sources checked.${failures.length ? ' Some requested sources were inaccessible; this is not proof the course has no matching material.' : ''}` }],
+      structuredContent: { status, course_id: input.course_id, items: [], coverage, retrieved_at: new Date().toISOString() } };
   }
 
   hits.sort((a, b) => b.score - a.score);
@@ -179,5 +192,7 @@ export async function handleSearchCourse(deps: SearchCourseDeps, rawInput: unkno
       type: 'text' as const,
       text: `${trimmed.length} match${trimmed.length === 1 ? '' : 'es'} (of ${hits.length}) for "${input.query}":\n\n${lines.join('\n\n')}`,
     }],
+    structuredContent: { status, course_id: input.course_id, items: trimmed, total: hits.length,
+      has_more: hits.length > trimmed.length, coverage, retrieved_at: new Date().toISOString() },
   };
 }

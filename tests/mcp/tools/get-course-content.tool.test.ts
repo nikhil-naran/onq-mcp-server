@@ -4,6 +4,7 @@ import { FakeContentRepository } from '@tests/helpers/fakes/FakeContentRepositor
 import { Module } from '@/contexts/content/domain/Module';
 import { Topic } from '@/contexts/content/domain/Topic';
 import { testOutputContext } from '../../helpers/test-output-context.js';
+import { D2lApiError } from '@/contexts/http-api/errors.js';
 
 describe('get_course_content tool', () => {
   it('renders module tree with topics', async () => {
@@ -19,5 +20,13 @@ describe('get_course_content tool', () => {
     const repo = new FakeContentRepository();
     const r = await handleGetCourseContent({ contentRepo: repo, output: testOutputContext() }, { course_id: 101 });
     expect(r.content[0]?.text).toMatch(/no course content/i);
+  });
+
+  it('labels denied historical content without exposing the D2L path', async () => {
+    const repo = new FakeContentRepository();
+    repo.findModules = async () => { throw new D2lApiError(403, '/private/path', 'Forbidden'); };
+    const r = await handleGetCourseContent({ contentRepo: repo, output: testOutputContext() }, { course_id: 101 });
+    expect(r.structuredContent).toMatchObject({ status: 'unavailable', error_code: 'forbidden', http_status: 403 });
+    expect(r.content[0]?.text).not.toContain('/private/path');
   });
 });

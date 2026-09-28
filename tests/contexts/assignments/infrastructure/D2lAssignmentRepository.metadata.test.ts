@@ -99,12 +99,12 @@ describe('D2lAssignmentRepository.findRubrics', () => {
     expect(rubrics[0]?.id).toBe(8001);
   });
 
-  it('falls back to the rubrics endpoint when the folder omits Assessment.Rubrics', async () => {
+  it('reads assignment associations when the folder omits Assessment.Rubrics', async () => {
     nock(BASE).get('/d2l/api/le/1.99/101/dropbox/folders/7001').reply(200, { ...folderWithRubric, Assessment: { ScoreDenominator: 5 } });
     nock(BASE)
-      .get('/d2l/api/le/1.99/101/rubrics')
-      .query({ objectType: 'Dropbox', objectId: '7001' })
-      .reply(200, folderWithRubric.Assessment.Rubrics);
+      .get('/d2l/api/le/1.99/101/dropbox/folders/7001/rubrics/')
+      .reply(200, [{ RubricId: 8001 }]);
+    nock(BASE).get('/d2l/api/le/1.99/101/rubrics/8001/').reply(200, folderWithRubric.Assessment.Rubrics[0]);
     const rubrics = await repo().findRubrics(OrgUnitId.of(101), AssignmentId.of(7001));
     expect(rubrics[0]?.name).toBe('Lab 4 rubric');
   });
@@ -112,9 +112,14 @@ describe('D2lAssignmentRepository.findRubrics', () => {
   it('returns [] when neither source has rubrics', async () => {
     nock(BASE).get('/d2l/api/le/1.99/101/dropbox/folders/7002').reply(200, { ...individualFolder, Assessment: null });
     nock(BASE)
-      .get('/d2l/api/le/1.99/101/rubrics')
-      .query({ objectType: 'Dropbox', objectId: '7002' })
-      .reply(404, '');
+      .get('/d2l/api/le/1.99/101/dropbox/folders/7002/rubrics/')
+      .reply(200, []);
     expect(await repo().findRubrics(OrgUnitId.of(101), AssignmentId.of(7002))).toEqual([]);
+  });
+
+  it('does not report no rubric when association access is forbidden', async () => {
+    nock(BASE).get('/d2l/api/le/1.99/101/dropbox/folders/7002').reply(200, { ...individualFolder, Assessment: null });
+    nock(BASE).get('/d2l/api/le/1.99/101/dropbox/folders/7002/rubrics/').reply(403, 'Forbidden');
+    await expect(repo().findRubrics(OrgUnitId.of(101), AssignmentId.of(7002))).rejects.toMatchObject({ status: 403 });
   });
 });

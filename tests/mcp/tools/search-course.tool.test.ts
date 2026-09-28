@@ -8,6 +8,7 @@ import { DiscussionForum } from '@/contexts/communications/domain/DiscussionForu
 import { DiscussionTopic } from '@/contexts/communications/domain/DiscussionTopic.js';
 import type { CommunicationsRepository } from '@/contexts/communications/domain/CommunicationsRepository.js';
 import type { ContentRepository } from '@/contexts/content/domain/ContentRepository.js';
+import { D2lApiError } from '@/contexts/http-api/errors.js';
 
 const fakeContent: ContentRepository = {
   findModules: async () => [
@@ -73,5 +74,14 @@ describe('handleSearchCourse', () => {
     const text = result.content[0]?.text ?? '';
     expect(text).toContain('Reminder about BGP');
     expect(text).not.toContain('AS_PATH');
+  });
+
+  it('does not treat a forbidden historical content section as no matches', async () => {
+    const contentRepo = { ...fakeContent, findModules: async () => { throw new D2lApiError(403, '/content/', '{}'); } };
+    const result = await handleSearchCourse({ contentRepo, communicationsRepo: fakeComms },
+      { course_id: 100, query: 'slides', scope: ['content'] });
+    expect(result.structuredContent).toMatchObject({ status: 'unavailable',
+      coverage: [{ source: 'content', status: 'forbidden' }] });
+    expect(result.content[0]?.text).toContain('inaccessible');
   });
 });

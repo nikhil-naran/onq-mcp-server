@@ -5,6 +5,7 @@ import { Assignment } from '@/contexts/assignments/domain/Assignment';
 import { AssignmentId } from '@/contexts/assignments/domain/AssignmentId';
 import { DueDate } from '@/contexts/assignments/domain/DueDate';
 import { testOutputContext } from '../../helpers/test-output-context.js';
+import { D2lApiError } from '@/contexts/http-api/errors.js';
 
 const a = (id: number, name: string, due: Date) =>
   new Assignment({
@@ -40,5 +41,13 @@ describe('get_assignments tool', () => {
     ]]]));
     const r = await handleGetAssignments({ assignmentRepo: repo, output: testOutputContext() }, { course_id: 101, include_past: true });
     expect(r.content[0]?.text).toContain('Past');
+  });
+
+  it('labels denied historical assignments without implying an empty list', async () => {
+    const repo = new FakeAssignmentRepository();
+    repo.findByCourse = async () => { throw new D2lApiError(403, '/private/path', 'Forbidden'); };
+    const r = await handleGetAssignments({ assignmentRepo: repo, output: testOutputContext() }, { course_id: 101 });
+    expect(r.structuredContent).toMatchObject({ status: 'unavailable', error_code: 'forbidden', http_status: 403 });
+    expect(r.content[0]?.text).not.toContain('/private/path');
   });
 });

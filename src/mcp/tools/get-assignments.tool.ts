@@ -5,11 +5,13 @@ import { assignmentsToCompact, assignmentsToDetailed } from '@/mcp/tool-helpers.
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
 import type { OutputContext } from '@/shared-kernel/output/index.js';
 import { AssignmentId } from '@/contexts/assignments/domain/AssignmentId.js';
+import { accessResult } from '@/mcp/access-result.js';
 
 export interface GetAssignmentsDeps { assignmentRepo: AssignmentRepository; output: OutputContext; }
 
 export async function handleGetAssignments(deps: GetAssignmentsDeps, rawInput: unknown) {
   const input = getAssignmentsSchema.parse(rawInput);
+  try {
   const list = await getAssignments({
     repo: deps.assignmentRepo,
     courseId: OrgUnitId.of(input.course_id),
@@ -25,4 +27,5 @@ export async function handleGetAssignments(deps: GetAssignmentsDeps, rawInput: u
       submission_status: a.submissionStatus,
     })), retrieved_at: new Date().toISOString(),
   } };
+  } catch (err) { return accessResult(err, 'assignments', input.course_id); }
 }

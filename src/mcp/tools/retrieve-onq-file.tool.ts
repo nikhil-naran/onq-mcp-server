@@ -9,6 +9,7 @@ import { readTopic } from '@/contexts/content/application/readTopic.js';
 import { detectFileFormat } from '@/shared-kernel/extract/detectFileFormat.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
 import { parseOnqFileRef } from '../onq-file-ref.js';
+import { D2lApiError, NetworkError } from '@/contexts/http-api/errors.js';
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const retrieveOnqFileSchema = z.object({
@@ -32,7 +33,8 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
   const courseId = OrgUnitId.of(ref.courseId);
   let data: Buffer;
   let filename: string;
-  switch (ref.source) {
+  try {
+    switch (ref.source) {
     case 'topic': {
       const result = await readTopic({ repo: deps.contentRepo, courseId, topicId: ref.topicId });
       if (result.status !== 'file') return error('unsupported', 'This topic does not have a downloadable file.');
@@ -71,6 +73,19 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
       filename = file.name;
       break;
     }
+    }
+  } catch (err) {
+    if (err instanceof D2lApiError) {
+      if (err.status === 403) return error('forbidden', 'OnQ does not permit this file for your account.');
+      if (err.status === 404) return error('not_found', 'This OnQ file is missing or no longer accessible.');
+      if (err.status === 401) return error('expired_auth', 'Your OnQ sign-in has expired.');
+    }
+    const cause = err instanceof NetworkError ? err.cause : err;
+    if (cause instanceof Error && cause.message.includes('25 MB limit'))
+      return error('too_large', 'File exceeds the 25 MB tunnel limit.');
+    if (cause instanceof Error && cause.message.includes('outside the LMS'))
+      return error('unsupported', 'External-host files are not supported by OnQ file retrieval.');
+    throw err;
   }
   if (data.length === 0) return error('unavailable', 'OnQ returned an empty file.');
   if (data.length > MAX_FILE_BYTES) return error('too_large', 'File exceeds the 25 MB tunnel limit.');

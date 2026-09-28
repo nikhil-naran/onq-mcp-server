@@ -20,5 +20,10 @@ export async function handleGetCalendarEvents(deps: GetCalendarEventsDeps, rawIn
   const text = calendarEventsToText(events, input.days, deps.output);
   const footer = deps.output.metaFooter();
   const body = footer ? `${text}\n\n${footer}` : text;
-  return { content: [{ type: 'text' as const, text: body }] };
+  return { content: [{ type: 'text' as const, text: body }], structuredContent: {
+    status: 'ok', course_id: input.course_id, days: input.days,
+    items: events.map(e => ({ event_id: e.id, title: e.title, starts_at: e.startAt.toISOString(),
+      ends_at: e.endAt?.toISOString() ?? null, is_all_day: e.isAllDay, location: e.location })),
+    retrieved_at: from.toISOString(), timezone: deps.output.tz,
+  } };
 }

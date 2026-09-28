@@ -31,9 +31,14 @@ function instructionsSnippet(raw: unknown): string | null {
 export async function handleListQuizzes(deps: ListQuizzesDeps, rawInput: unknown) {
   const input = listQuizzesSchema.parse(rawInput);
   const quizzes = await listQuizzes({ repo: deps.quizRepo, courseId: String(input.course_id) });
+  const structuredContent = { status: 'ok', course_id: input.course_id,
+    items: quizzes.map(q => ({ quiz_id: q.id, title: q.name, opens_at: q.startDate?.toISOString() ?? null,
+      due_at: q.dueDate?.toISOString() ?? null, closes_at: q.endDate?.toISOString() ?? null,
+      is_active: q.isActive, attempts_taken: q.attemptsTaken, attempts_allowed: q.attemptsAllowed })),
+    retrieved_at: new Date().toISOString() };
 
   if (quizzes.length === 0) {
-    return { content: [{ type: 'text' as const, text: 'No quizzes in this course.' }] };
+    return { content: [{ type: 'text' as const, text: 'No quizzes in this course.' }], structuredContent };
   }
 
   const fmt = (d: Date | null) => deps.output.formatDate(d, 'datetime');
@@ -63,5 +68,6 @@ export async function handleListQuizzes(deps: ListQuizzesDeps, rawInput: unknown
       type: 'text' as const,
       text: body,
     }],
+    structuredContent,
   };
 }
