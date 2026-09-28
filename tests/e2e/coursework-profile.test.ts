@@ -23,13 +23,13 @@ describe('Windows coursework tool profile', () => {
 
   it('retains coursework capabilities while hiding unverified and maintenance actions', async () => {
     const names = (await client.listTools()).tools.map(t => t.name);
-    expect(names.length).toBeLessThanOrEqual(27);
+    expect(names.length).toBeLessThanOrEqual(28);
     expect(names).toEqual(expect.arrayContaining([
       'list_my_courses', 'get_course_overview', 'get_course_content', 'get_module',
       'get_assignments', 'get_assignment_details', 'get_assignment_files', 'get_my_submissions',
       'get_my_grades', 'get_feedback', 'get_roster', 'get_announcements', 'get_announcement',
       'get_calendar_events', 'get_upcoming_due_dates', 'show_onq_agenda', 'list_quizzes',
-      'find_onq_files', 'retrieve_onq_file', 'check_auth',
+      'find_onq_files', 'retrieve_onq_file', 'get_original_pdf', 'check_auth',
     ]));
     for (const hidden of ['get_content_completions', 'get_quiz_attempts', 'get_classlist_emails',
       'clear_cache', 'get_diagnostics', 'get_audit_log', 'submit_assignment']) expect(names).not.toContain(hidden);

@@ -50,6 +50,7 @@ import { handleGetCalendarEvents, type GetCalendarEventsDeps } from './tools/get
 import { handleGetAssignmentFiles, type GetAssignmentFilesDeps } from './tools/get-assignment-files.tool.js';
 import { handleFindOnqFiles, findOnqFilesSchema, type FindOnqFilesDeps } from './tools/find-onq-files.tool.js';
 import { handleRetrieveOnqFile, retrieveOnqFileSchema, type RetrieveOnqFileDeps } from './tools/retrieve-onq-file.tool.js';
+import { handleGetOriginalPdf, getOriginalPdfSchema, type GetOriginalPdfDeps } from './tools/get-original-pdf.tool.js';
 import { handleGetModule, getModuleSchema, type GetModuleDeps } from './tools/get-module.tool.js';
 import { handleGetAuditLog, type GetAuditLogDeps } from './tools/get-audit-log.tool.js';
 import { handleListQuizzes, type ListQuizzesDeps } from './tools/list-quizzes.tool.js';
@@ -98,6 +99,7 @@ export interface ToolDeps
     GetAssignmentFilesDeps,
     FindOnqFilesDeps,
     RetrieveOnqFileDeps,
+    GetOriginalPdfDeps,
     GetModuleDeps,
     GetAuditLogDeps,
     ListQuizzesDeps,
@@ -438,6 +440,22 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async (input: unknown) => handleRetrieveOnqFile(deps, input),
+  );
+
+  // Temporary PDF-only comparison alongside the universal file path.
+  server.registerTool(
+    'get_original_pdf',
+    {
+      title: 'Get Original OnQ PDF',
+      description:
+        'Return one complete, original lecture PDF from a file topic or a course-scoped content path. ' +
+        'Use list_my_courses and get_course_content first to locate slides. ' +
+        'The server does not extract text, render pages, or save the PDF. ' +
+        'If the host cannot inspect the attached PDF resource, explain that limitation to the user.',
+      inputSchema: getOriginalPdfSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async (input: unknown) => handleGetOriginalPdf(deps, input),
   );
 
   server.registerTool(

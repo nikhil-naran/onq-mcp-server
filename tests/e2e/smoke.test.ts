@@ -51,13 +51,13 @@ profiles:
     expect(text).toContain('Smoke 101');
   });
 
-  it('exposes only the universal file retrieval path', async () => {
+  it('exposes universal retrieval and the temporary PDF comparison tool', async () => {
     const names = (await client.listTools()).tools.map(t => t.name);
     expect(names).toContain('find_onq_files');
     expect(names).toContain('retrieve_onq_file');
     expect(names).not.toContain('get_topic_file');
     expect(names).not.toContain('get_course_file');
-    expect(names).not.toContain('get_original_pdf');
+    expect(names).toContain('get_original_pdf');
     expect(names).not.toContain('submit_assignment');
   });
 
