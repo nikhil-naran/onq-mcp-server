@@ -28,13 +28,15 @@ const error = (code: string, message: string) => ({ isError: true,
 
 function inspectionHint(mimeType: string): string {
   if (mimeType === 'application/pdf')
-    return 'Open or render the PDF with a client-side viewer and inspect the relevant pages visually, including diagrams. Text extraction alone does not verify visual details.';
+    return 'Read the saved PDF with a PDF-aware viewer. Check its page count, then render and inspect the pages needed for the answer; for a whole-deck summary, sample the beginning, middle, and end. Inspect diagrams, tables, and layouts visually before describing them. The PDF text layer or pdftotext may help locate passages, but cannot verify visual details.';
   if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
       mimeType === 'application/vnd.ms-powerpoint')
-    return 'Open or render the presentation with a client-side viewer and inspect the relevant slides visually, including diagrams. Text extraction alone does not verify slide layout.';
+    return 'Open or render the saved presentation with a slide viewer. Inspect the relevant slides visually, including diagrams and layout; extracted slide text alone is insufficient for visual claims.';
   if (mimeType.startsWith('image/'))
-    return 'Open the image with a client-side viewer before describing its visual contents.';
-  return 'Open the original file with a compatible client-side viewer before describing its contents. If this client cannot inspect the format, say so.';
+    return 'Open the saved image with an image viewer before describing its visual contents.';
+  if (mimeType.startsWith('text/'))
+    return 'Read the saved original with a text or Markdown viewer, preserving its structure and links.';
+  return 'Open the saved original with a compatible viewer before describing its contents. If this client cannot inspect the format, say so.';
 }
 
 /** Fetch a single authorized source and pass its bytes through unchanged. */
@@ -114,10 +116,11 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
       `Source file_ref for later questions: ${file_ref}. ` +
       'First save these unchanged bytes as a file in the client workspace (/mnt/data when available) ' +
       'using a safe filename based on the returned filename, then attach/link that file as a clickable source. ' +
-      'If only resource.blob is exposed, base64-decode it directly to that saved file; SHA-256 is a checksum, not decodable file data. ' +
+      'If only resource.blob is exposed, base64-decode it directly to that final file with a binary-safe operation; ' +
+      'do not stream or print the blob through an interactive terminal. ' +
+      'Verify the saved byte length and SHA-256 against this result before reading it; SHA-256 is a checksum, not file data. ' +
       'Do not extract text, render, summarize, or make content claims before saving the original file. ' +
       `${inspectionHint(detected.mimeType)} ` +
-      'Do not start with pdftotext; text extraction can supplement inspection after the original is saved. ' +
       'If the earlier attachment is unavailable later, retrieve this file_ref again. ' +
       'The server did not extract text or render pages. If this client cannot open the resource as a file, say so.' },
     { type: 'resource' as const, resource: {
