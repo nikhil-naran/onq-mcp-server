@@ -433,7 +433,8 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Return the complete original OnQ file as an embedded MCP resource with SHA-256 metadata. ' +
         'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
         'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
-        'Use the returned file as a source in this conversation; keep file_ref to retrieve it again in later turns. ' +
+        'Attach the complete original file to the answer as a clickable source the user can view and reference later. ' +
+        'Keep file_ref to retrieve it again in later turns; a summary or extracted text is not a file attachment. ' +
         'If the client only exposes the base64 blob, decode it into a temporary client-side file before opening it. ' +
         'For visual questions, render relevant PDF pages, slides, or images with an available client-side viewer. ' +
         'The server does not extract text or render pages. If this client cannot inspect the file type, say so.',
