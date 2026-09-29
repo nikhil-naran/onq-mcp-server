@@ -111,11 +111,13 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
   return { content: [
     { type: 'text' as const, text: `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). ` +
       `SHA-256: ${digest}. The complete, unchanged bytes are included as an MCP resource. ` +
-      `Source file_ref for later questions: ${file_ref}. ${inspectionHint(detected.mimeType)} ` +
-      'Attach this complete original file to the answer as a clickable source the user can open later; ' +
-      'do not substitute a summary or extracted text. ' +
-      'If this client only exposes resource.blob, base64-decode it into a temporary client-side file ' +
-      'using a safe filename based on the returned filename; SHA-256 is a checksum, not decodable file data. ' +
+      `Source file_ref for later questions: ${file_ref}. ` +
+      'First save these unchanged bytes as a file in the client workspace (/mnt/data when available) ' +
+      'using a safe filename based on the returned filename, then attach/link that file as a clickable source. ' +
+      'If only resource.blob is exposed, base64-decode it directly to that saved file; SHA-256 is a checksum, not decodable file data. ' +
+      'Do not extract text, render, summarize, or make content claims before saving the original file. ' +
+      `${inspectionHint(detected.mimeType)} ` +
+      'Do not start with pdftotext; text extraction can supplement inspection after the original is saved. ' +
       'If the earlier attachment is unavailable later, retrieve this file_ref again. ' +
       'The server did not extract text or render pages. If this client cannot open the resource as a file, say so.' },
     { type: 'resource' as const, resource: {
@@ -127,3 +129,4 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
     mime_type: detected.mimeType, byte_length: data.length, sha256: digest, resource_uri: uri,
     retrieved_at: new Date().toISOString() } };
 }
+
