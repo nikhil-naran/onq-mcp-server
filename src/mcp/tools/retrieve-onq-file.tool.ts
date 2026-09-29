@@ -31,6 +31,9 @@ const error = (code: string, message: string) => ({ isError: true,
 
 /** Chunk size for writing the blob; a size that survives being written in one code call. */
 const BLOB_CHUNK_CHARS = 20_000;
+// The tunnel rejects an entire MCP response above 10 MiB. Base64 adds about
+// one third to the file size, so leave room for the MCP envelope and metadata.
+const MAX_INLINE_FILE_BYTES = 6 * 1024 * 1024;
 
 /** How to read the saved original the way an uploaded file is read: by looking at it, never by extracting its text. */
 function inspectionHint(mimeType: string): string {
@@ -124,14 +127,16 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
       if (err.status === 401) return error('expired_auth', 'Your OnQ sign-in has expired.');
     }
     if (err instanceof DownloadRejectedError) {
-      if (err.reason === 'too_large') return error('too_large', 'File exceeds the 25 MB tunnel limit.');
+      if (err.reason === 'too_large') return error('too_large', 'File exceeds the 25 MiB OnQ download limit.');
       if (err.reason === 'external_redirect') return error('unsupported', 'External-host files are not supported by OnQ file retrieval.');
       return error('unavailable', `OnQ sent an unusable redirect for this file (${err.message}).`);
     }
     throw err;
   }
   if (data.length === 0) return error('unavailable', 'OnQ returned an empty file.');
-  if (data.length > MAX_DOWNLOAD_BYTES) return error('too_large', 'File exceeds the 25 MB tunnel limit.');
+  if (data.length > MAX_DOWNLOAD_BYTES) return error('too_large', 'File exceeds the 25 MiB OnQ download limit.');
+  if (data.length > MAX_INLINE_FILE_BYTES)
+    return error('too_large', `This ${data.length}-byte file cannot be delivered through the current tunnel's 10 MiB response limit. The original file was not sent.`);
   const wrongBody = htmlInsteadOfFile(data, filename);
   if (wrongBody === 'expired_auth') return error('expired_auth', 'OnQ returned a sign-in page instead of the file. Renew the Queen’s browser session.');
   if (wrongBody === 'unavailable') return error('unavailable', `OnQ returned an HTML page instead of ${filename}. The file may have been moved; list it again.`);

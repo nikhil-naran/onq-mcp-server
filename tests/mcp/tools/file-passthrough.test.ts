@@ -189,6 +189,17 @@ describe('universal OnQ file retrieval', () => {
     expect(binary).toHaveBeenCalledTimes(2);
   });
 
+  it('reports an oversized original without sending a blob that would stop the tunnel', async () => {
+    const repo = new FakeContentRepository(new Map(), new Map([[101, modules]]));
+    vi.spyOn(repo, 'findTopicFile').mockResolvedValue(Buffer.alloc(7 * 1024 * 1024, 0x5a));
+    const result = await handleRetrieveOnqFile({ contentRepo: repo, assignmentRepo: {} as never,
+      communicationsRepo: {} as never, baseUrl: 'https://onq.queensu.ca' },
+      { file_ref: 'onq-file:topic:101:8' });
+    expect(result.structuredContent).toMatchObject({ error_code: 'too_large' });
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]?.type).toBe('text');
+  });
+
   it('lists attachment references and retrieves the original only when requested', async () => {
     const assignmentRepo = new FakeAssignmentRepository();
     const binary = Buffer.from('raw attachment bytes');

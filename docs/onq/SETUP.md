@@ -8,7 +8,7 @@ Persistent interactive Queen’s sign-in, credential-file repair, rubric access,
 
 The Windows tunnel sets `ONQ_TOOL_PROFILE=coursework`. It keeps the separate course, module, assignment, announcement, grade, calendar, quiz-list, and file discovery/retrieval tools. It hides completion counts and quiz attempts until their student permissions and results are verified against OnQ. It also hides `clear_cache`, `get_diagnostics`, and `get_audit_log` from ordinary coursework; run the server locally without that profile for troubleshooting. `get_roster(format="emails")` uses the same cached classlist as the people view. `get_course_overview` reports access separately for each requested section of one course, including historical courses.
 
-`retrieve_onq_file` returns original bytes as an MCP resource with filename, MIME type, byte length, and SHA-256. Whether ChatGPT makes that resource a native conversation attachment requires a separate live check. If it does not, use OnQ's own download and attach flow for the original file. The server does not extract PDF text or render PDF pages.
+`retrieve_onq_file` returns original bytes as an MCP resource with filename, MIME type, byte length, and SHA-256 when the file fits the tunnel. The tunnel has a 10 MiB response limit, so the tool returns `too_large` for files over 6 MiB instead of sending a response that would stop the tunnel. Whether ChatGPT makes a supported resource a native conversation attachment requires a separate live check. If it does not, use OnQ's own download and attach flow for the original file. The server does not extract PDF text or render PDF pages.
 
 ## 1. Prepare Windows
 
