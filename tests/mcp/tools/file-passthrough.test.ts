@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleRetrieveOnqFile } from '@/mcp/tools/retrieve-onq-file.tool.js';
+import { handleRetrieveOnqFile, safeFilename } from '@/mcp/tools/retrieve-onq-file.tool.js';
 import { handleFindOnqFiles } from '@/mcp/tools/find-onq-files.tool.js';
 import { handleGetAssignmentFiles } from '@/mcp/tools/get-assignment-files.tool.js';
 import { handleGetMySubmissions } from '@/mcp/tools/get-my-submissions.tool.js';
@@ -142,6 +142,29 @@ describe('universal OnQ file retrieval', () => {
         mime_type: mime, byte_length: original.length,
         sha256: createHash('sha256').update(original).digest('hex') });
     }
+  });
+
+  it('gives checkable save steps and never asks the client to extract text', async () => {
+    const repo = new FakeContentRepository(new Map(), new Map([[101, modules]]));
+    const pdf = buildPdf(['ASIL matrix']);
+    vi.spyOn(repo, 'findTopicFile').mockResolvedValue(pdf);
+    const result = await handleRetrieveOnqFile({ contentRepo: repo, assignmentRepo: {} as never,
+      communicationsRepo: {} as never, baseUrl: 'https://onq.queensu.ca' }, { file_ref: 'onq-file:topic:101:8' });
+    const base64Length = fileResource(result).blob.length;
+    expect(result.structuredContent).toMatchObject({ save_as: '92817.pdf', base64_length: base64Length, byte_length: pdf.length });
+    const guide = result.content[0]?.type === 'text' ? result.content[0].text : '';
+    expect(guide).toContain(`exactly ${base64Length} characters`);
+    expect(guide).toContain(`exactly ${pdf.length} bytes`);
+    expect(guide).toContain('Never use or link a partial copy');
+    expect(guide).toMatch(/render the pages you need to images and look at them/);
+    expect(guide).not.toMatch(/pdftotext|text layer/i);
+  });
+
+  it('makes workspace-safe filenames that keep the extension', () => {
+    expect(safeFilename('4 - risk.pdf')).toBe('4 - risk.pdf');
+    expect(safeFilename('../../etc/pass:wd?.pdf')).toBe('_etc_pass_wd_.pdf');
+    expect(safeFilename('Capítulo 1.pdf')).toBe('Capítulo 1.pdf');
+    expect(safeFilename('...')).toBe('onq-file');
   });
 
   it('rejects another course path and a sign-in response', async () => {

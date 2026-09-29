@@ -433,11 +433,10 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Return the complete original OnQ file as an embedded MCP resource with SHA-256 metadata. ' +
         'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
         'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
-        'First save the complete original bytes as a file in the client workspace (/mnt/data when available) and attach/link it as a clickable source. ' +
-        'Do this before text extraction, rendering, or summarizing. If only the base64 blob is exposed, decode it directly to that final file without interactive terminal streaming. ' +
-        'Verify byte length and SHA-256, then read the saved file with a format-aware viewer. Render relevant PDF pages or slides for visual claims; extracted text can help locate passages but does not verify diagrams. ' +
-        'Keep file_ref to retrieve it again in later turns; a summary or extracted text is not a file attachment. ' +
-        'The server does not extract text or render pages. If this client cannot inspect the file type, say so.',
+        'Save the original before reading it, following the numbered steps in the result: write the blob in chunks, check its length, ' +
+        'decode once, and verify byte length and SHA-256; never stream base64 through an interactive terminal or use a partial copy. ' +
+        'Link the saved file as a clickable source. Read it the way an uploaded file is read: render PDF pages or slides to images and look at them. ' +
+        'Do not extract text. Keep file_ref to retrieve it again in later turns. The server passes the bytes through unchanged.',
       inputSchema: retrieveOnqFileSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },

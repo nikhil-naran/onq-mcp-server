@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- `retrieve_onq_file` now gives the client numbered, checkable steps for saving the original: use the resource as a file if the client exposes one, else write the base64 blob in chunks of at most 20,000 characters, check it against the new `base64_length` before decoding once to the new `save_as` filename, then verify `byte_length` and `sha256`, never using a partial copy. This follows the procedure that worked in ChatGPT after streaming a blob through a terminal produced an incomplete file.
+- File guidance no longer suggests text extraction (`pdftotext`, the PDF text layer). The client is told to read the saved original the way an uploaded file is read: render the pages or slides to images and look at them, viewing every page before summarizing a whole document.
+
 ### Fixed
 - `find_onq_files` dropped one-digit numbers from queries ("week 8" searched only "week") and matched substrings, so "1" also hit "10" and "2021". Numbers now match whole tokens ("Week8", "L08" and "Week 8" all match "week 8"), words match by prefix ("slide" finds "slides"), and when anything matches, zero-score files are no longer padded into the results.
 - `find_onq_files` listed a file twice when a topic and a module-description link pointed to it, and showed percent-encoded or dot-less filenames ("Course%20Outline.pdf", "Reading listpdf"). `retrieve_onq_file` used the same broken fallback name.

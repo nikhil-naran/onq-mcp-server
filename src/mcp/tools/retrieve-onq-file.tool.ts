@@ -29,17 +29,28 @@ export interface RetrieveOnqFileDeps {
 const error = (code: string, message: string) => ({ isError: true,
   content: [{ type: 'text' as const, text: message }], structuredContent: { status: 'unavailable', error_code: code, message } });
 
+/** Chunk size for writing the blob; a size that survives being written in one code call. */
+const BLOB_CHUNK_CHARS = 20_000;
+
+/** How to read the saved original the way an uploaded file is read: by looking at it, never by extracting its text. */
 function inspectionHint(mimeType: string): string {
   if (mimeType === 'application/pdf')
-    return 'Read the saved PDF with a PDF-aware viewer. Check its page count, then render and inspect the pages needed for the answer; for a whole-deck summary, sample the beginning, middle, and end. Inspect diagrams, tables, and layouts visually before describing them. The PDF text layer or pdftotext may help locate passages, but cannot verify visual details.';
+    return 'Check its page count, then render the pages you need to images and look at them; for a summary of the whole document, look at every page. Read text, diagrams, tables, and layout from the page images.';
   if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
       mimeType === 'application/vnd.ms-powerpoint')
-    return 'Open or render the saved presentation with a slide viewer. Inspect the relevant slides visually, including diagrams and layout; extracted slide text alone is insufficient for visual claims.';
+    return 'Render the slides to images (converting the saved deck to PDF first if needed) and look at them, including diagrams and layout.';
   if (mimeType.startsWith('image/'))
-    return 'Open the saved image with an image viewer before describing its visual contents.';
+    return 'Open the saved image and look at it.';
   if (mimeType.startsWith('text/'))
-    return 'Read the saved original with a text or Markdown viewer, preserving its structure and links.';
-  return 'Open the saved original with a compatible viewer before describing its contents. If this client cannot inspect the format, say so.';
+    return 'Read the saved file as it is, preserving its structure and links.';
+  return 'Open the saved original with a viewer for its format. If this client cannot open the format, say so.';
+}
+
+/** Filename safe for any workspace: path separators and unusual characters become "_", the extension is kept. */
+export function safeFilename(filename: string): string {
+  const cleaned = filename.normalize('NFC').replace(/\.{2,}/g, '_').replace(/[^\p{L}\p{N}._ -]+/gu, '_').replace(/\s+/g, ' ').replace(/_+/g, '_').trim();
+  const noDots = cleaned.replace(/^\.+/, '');
+  return (/[\p{L}\p{N}]/u.test(noDots) ? noDots : 'onq-file').slice(-120);
 }
 
 /**
@@ -127,26 +138,32 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
   const detected = detectFileFormat(data, filename);
   const digest = createHash('sha256').update(data).digest('hex');
   const uri = `onq-file://course/${ref.courseId}/${digest}/${encodeURIComponent(filename)}`;
+  const blob = data.toString('base64');
+  const saveAs = safeFilename(filename);
   return { content: [
-    { type: 'text' as const, text: `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). ` +
-      `SHA-256: ${digest}. The complete, unchanged bytes are included as an MCP resource. ` +
-      `Source file_ref for later questions: ${file_ref}. ` +
-      'First save these unchanged bytes as a file in the client workspace (/mnt/data when available) ' +
-      'using a safe filename based on the returned filename, then attach/link that file as a clickable source. ' +
-      'If only resource.blob is exposed, base64-decode it directly to that final file with a binary-safe operation; ' +
-      'do not stream or print the blob through an interactive terminal. ' +
-      'Verify the saved byte length and SHA-256 against this result before reading it; SHA-256 is a checksum, not file data. ' +
-      'Do not extract text, render, summarize, or make content claims before saving the original file. ' +
-      `${inspectionHint(detected.mimeType)} ` +
-      'If the earlier attachment is unavailable later, retrieve this file_ref again. ' +
-      'The server did not extract text or render pages. If this client cannot open the resource as a file, say so.' },
+    { type: 'text' as const, text: [
+      `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). SHA-256: ${digest}.`,
+      `The complete, unchanged bytes are in the attached MCP resource as base64 (${blob.length} characters).`,
+      'Save the original before reading, summarizing, or making any claim about it:',
+      `1. If this client already exposes the resource as a file, use that file and go to step 4.`,
+      `2. Otherwise write resource.blob to "${saveAs}.b64" in the client workspace (/mnt/data when available), in chunks of at most ` +
+        `${BLOB_CHUNK_CHARS} characters, appending each chunk exactly as given. Never stream or print the blob through an interactive terminal.`,
+      `3. Check that "${saveAs}.b64" is exactly ${blob.length} characters, then base64-decode it once to "${saveAs}" and delete the .b64 file.`,
+      `4. Check that the saved file is exactly ${data.length} bytes with SHA-256 ${digest}. If either check fails, delete it and ` +
+        'repeat from step 2 (call retrieve_onq_file again if the blob is no longer available). Never use or link a partial copy.',
+      `5. Link the saved "${saveAs}" in your answer as the source.`,
+      `Then read the saved original the way an uploaded file is read. ${inspectionHint(detected.mimeType)} Do not extract its text.`,
+      `SHA-256 is a checksum, not file data. Keep file_ref ${file_ref} for later questions; retrieve it again if the saved copy is gone.`,
+      'The server passed the bytes through unchanged. If this client cannot save or open the file, say so.',
+    ].join('\n') },
     { type: 'resource' as const, resource: {
       uri,
       mimeType: detected.mimeType,
-      blob: data.toString('base64'),
+      blob,
     } },
   ], structuredContent: { status: 'ok', file_ref, course_id: ref.courseId, filename,
     mime_type: detected.mimeType, byte_length: data.length, sha256: digest, resource_uri: uri,
+    save_as: saveAs, base64_length: blob.length,
     retrieved_at: new Date().toISOString() } };
 }
 
