@@ -3,7 +3,7 @@ import type { AccessToken } from '@/contexts/authentication/domain/AccessToken.j
 import { InMemoryCache } from '@/shared-kernel/cache/InMemoryCache.js';
 import type { MetricsRegistry } from '@/shared-kernel/observability/MetricsRegistry.js';
 import { HttpResponseCache } from './cache/HttpResponseCache.js';
-import { AuthExpiredError, D2lApiError, NetworkError, RateLimitedError, classifyD2lError } from './errors.js';
+import { AuthExpiredError, D2lApiError, DownloadRejectedError, NetworkError, RateLimitedError, classifyD2lError } from './errors.js';
 import type { Bulkhead } from './resilience/Bulkhead.js';
 import { CircuitBreaker, CircuitOpenError } from './resilience/CircuitBreaker.js';
 import type { RequestCoalescer } from './resilience/RequestCoalescer.js';
@@ -50,6 +50,8 @@ export interface D2lApiClientOptions {
 }
 
 const DEFAULT_UA = 'brightspace-mcp/dev (+https://github.com/JhostinAleck/brightspace-mcp)';
+/** Cap on binary downloads (`getRaw`); larger files are rejected with DownloadRejectedError. */
+export const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
 function parseRetryAfterMs(header: string | null): number | null {
   if (!header) return null;
@@ -226,6 +228,7 @@ export class D2lApiClient {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
+      if (err instanceof DownloadRejectedError) throw err;
       this.metrics?.inc('http.network_error');
       throw new NetworkError(`GET ${path} failed`, err instanceof Error ? err : undefined);
     } finally {
@@ -236,10 +239,10 @@ export class D2lApiClient {
       const body = await response.text().catch(() => '');
       throw classifyD2lError(new D2lApiError(response.status, path, body));
     }
-    const maxBytes = 25 * 1024 * 1024;
+    const maxBytes = MAX_DOWNLOAD_BYTES;
     if (Number(response.headers.get('content-length')) > maxBytes) {
       await response.body?.cancel();
-      throw new Error('Download exceeds 25 MB limit');
+      throw new DownloadRejectedError('too_large', 'Download exceeds 25 MB limit');
     }
     const reader = response.body?.getReader();
     if (!reader) return Buffer.alloc(0);
@@ -250,7 +253,7 @@ export class D2lApiClient {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > maxBytes) throw new Error('Download exceeds 25 MB limit');
+        if (size > maxBytes) throw new DownloadRejectedError('too_large', 'Download exceeds 25 MB limit');
         chunks.push(value);
       }
     } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
@@ -260,16 +263,18 @@ export class D2lApiClient {
   private async fetchDownload(url: string, init: RequestInit): Promise<Response> {
     const origin = new URL(this.baseUrl).origin;
     for (let hops = 0; hops < 6; hops++) {
-      if (new URL(url).origin !== origin) throw new Error('Download redirects outside the LMS are not supported');
+      if (new URL(url).origin !== origin) {
+        throw new DownloadRejectedError('external_redirect', 'Download redirects outside the LMS are not supported');
+      }
       this.transport.validate(url);
       const response = await fetch(url, { ...init, redirect: 'manual' });
       if (![301, 302, 303, 307, 308].includes(response.status)) return response;
       const location = response.headers.get('location');
       await response.body?.cancel();
-      if (!location) throw new Error('Download redirect has no destination');
+      if (!location) throw new DownloadRejectedError('bad_redirect', 'Download redirect has no destination');
       url = new URL(location, url).href;
     }
-    throw new Error('Too many download redirects');
+    throw new DownloadRejectedError('bad_redirect', 'Too many download redirects');
   }
 
   async postMultipart<T>(path: string, formData: FormData): Promise<T> {
@@ -545,6 +550,7 @@ export class D2lApiClient {
   // counts as a real infrastructure failure.
   private isInfrastructureFailure(err: unknown): boolean {
     if (err instanceof D2lApiError) return err.status >= 500;
+    if (err instanceof DownloadRejectedError) return false;
     return true;
   }
 

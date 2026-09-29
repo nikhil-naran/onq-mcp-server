@@ -6,12 +6,15 @@ import type { CommunicationsRepository } from '@/contexts/communications/domain/
 import { AssignmentId } from '@/contexts/assignments/domain/AssignmentId.js';
 import { getCourseFile } from '@/contexts/content/application/getCourseFile.js';
 import { readTopic } from '@/contexts/content/application/readTopic.js';
-import { detectFileFormat } from '@/shared-kernel/extract/detectFileFormat.js';
+import { detectFileFormat, fileExtension } from '@/shared-kernel/extract/detectFileFormat.js';
 import { OrgUnitId } from '@/shared-kernel/types/OrgUnitId.js';
-import { parseOnqFileRef } from '../onq-file-ref.js';
-import { D2lApiError, NetworkError } from '@/contexts/http-api/errors.js';
+import { parseOnqFileRef, topicFilename } from '../onq-file-ref.js';
+import { MAX_DOWNLOAD_BYTES } from '@/contexts/http-api/D2lApiClient.js';
+import { D2lApiError, DownloadRejectedError } from '@/contexts/http-api/errors.js';
 
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
+/** Extensions whose bytes are never an HTML page; an HTML body for one of these is a login or error page. */
+const NON_HTML_EXTS = new Set(['pdf', 'ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'png', 'jpg', 'jpeg', 'gif', 'webp',
+  'mp3', 'mp4', 'mov', 'm4a', 'wav']);
 export const retrieveOnqFileSchema = z.object({
   file_ref: z.string().min(1).max(4096).describe('File reference returned by find_onq_files or a metadata tool.'),
 }).strict();
@@ -39,6 +42,19 @@ function inspectionHint(mimeType: string): string {
   return 'Open the saved original with a compatible viewer before describing its contents. If this client cannot inspect the format, say so.';
 }
 
+/**
+ * Why an HTML body cannot be the requested file, or null when it can be. Real
+ * course HTML pages may mention "log in", so words alone only count when the
+ * file is expected to be a binary document; a password field always counts.
+ */
+function htmlInsteadOfFile(data: Buffer, filename: string): 'expired_auth' | 'unavailable' | null {
+  const head = data.subarray(0, 8192).toString('utf8');
+  if (!/<(?:!doctype\s+html|html|body|form)\b/i.test(head)) return null;
+  if (/<input\b[^>]*type\s*=\s*["']?password/i.test(head) || /\/d2l\/login\b/i.test(head)) return 'expired_auth';
+  if (!NON_HTML_EXTS.has(fileExtension(filename) ?? '')) return null;
+  return /(?:sign\s*in|log\s*in|login)/i.test(head) ? 'expired_auth' : 'unavailable';
+}
+
 /** Fetch a single authorized source and pass its bytes through unchanged. */
 export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput: unknown) {
   const { file_ref } = retrieveOnqFileSchema.parse(rawInput);
@@ -50,10 +66,13 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
     switch (ref.source) {
     case 'topic': {
       const result = await readTopic({ repo: deps.contentRepo, courseId, topicId: ref.topicId });
-      if (result.status !== 'file') return error('unsupported', 'This topic does not have a downloadable file.');
+      if (result.status === 'broken') return error('not_found', `The file behind "${result.topic.title}" was deleted or unlinked in OnQ.`);
+      if (result.status === 'not_downloadable') {
+        const target = result.topic.url ? ` Its target is ${result.topic.url}.` : '';
+        return error('unsupported', `"${result.topic.title}" is a ${result.topic.kind} topic, not a file.${target}`);
+      }
       data = result.content;
-      filename = result.filename?.split(/[?#]/)[0]?.split('/').pop() ||
-        `${result.topic?.title ?? `topic-${ref.topicId}`}${result.topic?.fileExtension ?? ''}`;
+      filename = topicFilename(result.filename, result.topic?.title ?? `topic-${ref.topicId}`, result.topic?.fileExtension);
       break;
     }
     case 'path': {
@@ -93,20 +112,18 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
       if (err.status === 404) return error('not_found', 'This OnQ file is missing or no longer accessible.');
       if (err.status === 401) return error('expired_auth', 'Your OnQ sign-in has expired.');
     }
-    const cause = err instanceof NetworkError ? err.cause : err;
-    if (cause instanceof Error && cause.message.includes('25 MB limit'))
-      return error('too_large', 'File exceeds the 25 MB tunnel limit.');
-    if (cause instanceof Error && cause.message.includes('outside the LMS'))
-      return error('unsupported', 'External-host files are not supported by OnQ file retrieval.');
+    if (err instanceof DownloadRejectedError) {
+      if (err.reason === 'too_large') return error('too_large', 'File exceeds the 25 MB tunnel limit.');
+      if (err.reason === 'external_redirect') return error('unsupported', 'External-host files are not supported by OnQ file retrieval.');
+      return error('unavailable', `OnQ sent an unusable redirect for this file (${err.message}).`);
+    }
     throw err;
   }
   if (data.length === 0) return error('unavailable', 'OnQ returned an empty file.');
-  if (data.length > MAX_FILE_BYTES) return error('too_large', 'File exceeds the 25 MB tunnel limit.');
-  const head = data.subarray(0, 8192).toString('utf8');
-  if (/<(?:!doctype\s+html|html|body|form)\b/i.test(head) &&
-      /(?:sign\s*in|log\s*in|login)/i.test(head)) {
-    return error('expired_auth', 'OnQ returned a sign-in page instead of the file. Renew the Queen’s browser session.');
-  }
+  if (data.length > MAX_DOWNLOAD_BYTES) return error('too_large', 'File exceeds the 25 MB tunnel limit.');
+  const wrongBody = htmlInsteadOfFile(data, filename);
+  if (wrongBody === 'expired_auth') return error('expired_auth', 'OnQ returned a sign-in page instead of the file. Renew the Queen’s browser session.');
+  if (wrongBody === 'unavailable') return error('unavailable', `OnQ returned an HTML page instead of ${filename}. The file may have been moved; list it again.`);
   const detected = detectFileFormat(data, filename);
   const digest = createHash('sha256').update(data).digest('hex');
   const uri = `onq-file://course/${ref.courseId}/${digest}/${encodeURIComponent(filename)}`;

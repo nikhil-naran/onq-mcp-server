@@ -18,6 +18,20 @@ export function encodeOnqFileRef(ref: OnqFileRef): string {
   }
 }
 
+/**
+ * Human-readable filename for a content topic: the decoded last segment of its
+ * /content/ URL, else its title plus extension. D2L extensions come without a
+ * dot ("pdf") from the repository but some fixtures carry one (".pdf").
+ */
+export function topicFilename(url: string | null | undefined, title: string, fileExtension: string | null | undefined): string {
+  const last = url?.split(/[?#]/)[0]?.split('/').pop();
+  if (last) {
+    try { return decodeURIComponent(last); } catch { return last; }
+  }
+  const ext = fileExtension?.replace(/^\./, '');
+  return ext && !title.toLowerCase().endsWith(`.${ext.toLowerCase()}`) ? `${title}.${ext}` : title;
+}
+
 function id(value: string | undefined): number {
   const n = Number(value);
   if (!value || !/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(n)) throw new Error('Invalid OnQ file reference.');

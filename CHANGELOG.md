@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `find_onq_files` dropped one-digit numbers from queries ("week 8" searched only "week") and matched substrings, so "1" also hit "10" and "2021". Numbers now match whole tokens ("Week8", "L08" and "Week 8" all match "week 8"), words match by prefix ("slide" finds "slides"), and when anything matches, zero-score files are no longer padded into the results.
+- `find_onq_files` listed a file twice when a topic and a module-description link pointed to it, and showed percent-encoded or dot-less filenames ("Course%20Outline.pdf", "Reading listpdf"). `retrieve_onq_file` used the same broken fallback name.
+- Courses are now searched concurrently instead of one after another.
+- A download rejected by the client (over 25 MB, or a redirect off the OnQ host) was retried as a network error and counted against the circuit breaker, so a few oversized files could block every tool for 30 s. These are now a typed `DownloadRejectedError` that is neither retried nor counted.
+- `retrieve_onq_file` refused any course HTML page that mentioned "log in" as an expired sign-in. A sign-in is now detected from a password field or D2L login URL, or from sign-in wording when a binary document (PDF, slides, …) was expected. An HTML page served in place of such a file is reported instead of being passed through.
+- `retrieve_onq_file` now says whether a topic's file was deleted (`not_found`) or the topic is a link/quiz/LTI (with its target URL), instead of a generic "no downloadable file".
+
 ## [1.3.1] - 2026-09-28
 
 ### Changed

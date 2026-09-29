@@ -16,7 +16,7 @@ import { Announcement } from '@/contexts/communications/domain/Announcement.js';
 import { testOutputContext } from '../../helpers/test-output-context.js';
 import { buildPdf, buildPptx } from '@tests/helpers/zip.js';
 import { createHash } from 'node:crypto';
-import { D2lApiError } from '@/contexts/http-api/errors.js';
+import { D2lApiError, DownloadRejectedError } from '@/contexts/http-api/errors.js';
 
 const course = new Course({ id: CourseId.of(101), name: 'Biology of Cells', code: 'BIOL101', active: true });
 const modules = [new Module({ id: 1, title: 'Week 8 cell diagrams and lecture slides',
@@ -56,6 +56,71 @@ describe('universal OnQ file retrieval', () => {
     expect(result.content[0]?.text).toContain('inaccessible materials, not zero files');
   });
 
+  it('matches week/lecture numbers exactly and word prefixes, dropping unrelated files', async () => {
+    const mods = [
+      new Module({ id: 1, title: 'Week 8', submodules: [], topics: [
+        new Topic({ id: 81, title: 'Lecture slides', kind: 'file', url: '/content/enforced/101-A/L08.pdf', fileExtension: 'pdf' })] }),
+      new Module({ id: 2, title: 'Week 18', submodules: [], topics: [
+        new Topic({ id: 181, title: 'Lecture slides', kind: 'file', url: '/content/enforced/101-A/L18.pdf', fileExtension: 'pdf' })] }),
+      new Module({ id: 3, title: 'Admin', submodules: [], topics: [
+        new Topic({ id: 3, title: 'Policies', kind: 'file', url: '/content/enforced/101-A/policy.docx', fileExtension: 'docx' })] }),
+    ];
+    const repo = new FakeContentRepository(new Map(), new Map([[101, mods]]));
+    const courseRepo = { findMyCourses: vi.fn().mockResolvedValue([course]) };
+    const result = await handleFindOnqFiles({ courseRepo: courseRepo as never, contentRepo: repo, baseUrl: 'https://onq.queensu.ca' },
+      { query: 'week 8 slide' });
+    const refs = result.structuredContent.items.map(i => i.file_ref);
+    expect(refs[0]).toBe('onq-file:topic:101:81');
+    // "Week 18" still matches "week" and "slide", but ranks below the exact week number.
+    expect(refs).toContain('onq-file:topic:101:181');
+    expect(refs).not.toContain('onq-file:topic:101:3');
+  });
+
+  it('lists a file once when a topic and a description link point to it, with a readable filename', async () => {
+    const mods = [new Module({ id: 1, title: 'Syllabus',
+      descriptionHtml: '<a href="/content/enforced/101-A/Course%20Outline.pdf">Outline</a>',
+      topics: [
+        new Topic({ id: 5, title: 'Course outline', kind: 'file', url: '/content/enforced/101-A/Course Outline.pdf', fileExtension: 'pdf' }),
+        new Topic({ id: 6, title: 'Reading list', kind: 'file', url: null, fileExtension: 'pdf' }),
+      ], submodules: [] })];
+    const repo = new FakeContentRepository(new Map(), new Map([[101, mods]]));
+    const courseRepo = { findMyCourses: vi.fn().mockResolvedValue([course]) };
+    const result = await handleFindOnqFiles({ courseRepo: courseRepo as never, contentRepo: repo, baseUrl: 'https://onq.queensu.ca' },
+      { query: 'syllabus' });
+    expect(result.structuredContent.items.map(i => [i.file_ref, i.filename])).toEqual([
+      ['onq-file:topic:101:5', 'Course Outline.pdf'],
+      ['onq-file:topic:101:6', 'Reading list.pdf'],
+    ]);
+  });
+
+  it('passes through a course HTML page that mentions logging in, but explains broken and link topics', async () => {
+    const html = Buffer.from('<!DOCTYPE html><html><body><h1>How to log in to the lab computers</h1></body></html>');
+    const mods = [new Module({ id: 1, title: 'Lab', submodules: [], topics: [
+      new Topic({ id: 1, title: 'Lab access', kind: 'file', url: '/content/enforced/101-A/Lab%20access.html', fileExtension: 'html' }),
+      new Topic({ id: 2, title: 'Old notes', kind: 'file', url: null, fileExtension: 'pdf', isBroken: true }),
+      new Topic({ id: 3, title: 'Textbook site', kind: 'link', url: 'https://publisher.example/book', fileExtension: null }),
+    ] })];
+    const repo = new FakeContentRepository(new Map(), new Map([[101, mods]]));
+    vi.spyOn(repo, 'findTopicFile').mockResolvedValue(html);
+    const deps = { contentRepo: repo, assignmentRepo: {} as never, communicationsRepo: {} as never, baseUrl: 'https://onq.queensu.ca' };
+    const page = await handleRetrieveOnqFile(deps, { file_ref: 'onq-file:topic:101:1' });
+    expect(page.structuredContent).toMatchObject({ status: 'ok', filename: 'Lab access.html', mime_type: 'text/html' });
+    const broken = await handleRetrieveOnqFile(deps, { file_ref: 'onq-file:topic:101:2' });
+    expect(broken.structuredContent).toMatchObject({ error_code: 'not_found' });
+    const link = await handleRetrieveOnqFile(deps, { file_ref: 'onq-file:topic:101:3' });
+    expect(link.structuredContent).toMatchObject({ error_code: 'unsupported' });
+    expect(link.content[0]?.text).toContain('https://publisher.example/book');
+  });
+
+  it('flags a login form served in place of any file', async () => {
+    const repo = new FakeContentRepository();
+    vi.spyOn(repo, 'findCourseFile').mockResolvedValue(Buffer.from('<html><form action="/d2l/lp/auth/login/login.d2l"><input type="password"></form></html>'));
+    const result = await handleRetrieveOnqFile({ contentRepo: repo, assignmentRepo: {} as never,
+      communicationsRepo: {} as never, baseUrl: 'https://onq.queensu.ca' },
+      { file_ref: encodeOnqFileRef({ source: 'path', courseId: 101, path: '/content/enforced/101-A/page.html' }) });
+    expect(result.structuredContent).toMatchObject({ error_code: 'expired_auth' });
+  });
+
   it('passes complete PDF, PowerPoint, and Markdown bytes without parsing them', async () => {
     const repo = new FakeContentRepository(new Map(), new Map([[101, modules]]));
     const pdf = buildPdf(['first', 'later page']);
@@ -92,7 +157,7 @@ describe('universal OnQ file retrieval', () => {
   it('reports denied and oversized downloads with distinct error codes', async () => {
     const repo = new FakeContentRepository();
     const binary = vi.spyOn(repo, 'findTopicFile').mockRejectedValueOnce(new D2lApiError(403, '/file', '{}'))
-      .mockRejectedValueOnce(new Error('Download exceeds 25 MB limit'));
+      .mockRejectedValueOnce(new DownloadRejectedError('too_large', 'Download exceeds 25 MB limit'));
     const deps = { contentRepo: repo, assignmentRepo: {} as never,
       communicationsRepo: {} as never, baseUrl: 'https://onq.queensu.ca' };
     const ref = encodeOnqFileRef({ source: 'topic', courseId: 101, topicId: 8 });
