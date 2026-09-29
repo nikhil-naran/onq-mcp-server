@@ -1,3 +1,5 @@
+import type { FileDelivery, FileDeliveryReservation } from '@/contexts/onq/domain/FileDelivery.js';
+import { FileDeliveryError } from '@/contexts/onq/domain/FileDelivery.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ContentRepository } from '@/contexts/content/domain/ContentRepository.js';
@@ -19,7 +21,27 @@ export const retrieveOnqFileSchema = z.object({
   file_ref: z.string().min(1).max(4096).describe('File reference returned by find_onq_files or a metadata tool.'),
 }).strict();
 
+export const retrieveOnqFileOutputSchema = z.object({
+  status: z.enum(['ok', 'unavailable']),
+  delivery: z.literal('download_url').optional(),
+  file_ref: z.string().optional(),
+  course_id: z.number().int().positive().optional(),
+  filename: z.string().optional(),
+  save_as: z.string().optional(),
+  mime_type: z.string().optional(),
+  byte_length: z.number().int().nonnegative().optional(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  download_url: z.url().optional(),
+  expires_at: z.string().optional(),
+  retrieved_at: z.string().optional(),
+  resource_uri: z.string().optional(),
+  base64_length: z.number().int().nonnegative().optional(),
+  error_code: z.string().optional(),
+  message: z.string().optional(),
+});
+
 export interface RetrieveOnqFileDeps {
+  fileDelivery?: FileDelivery;
   contentRepo: ContentRepository;
   assignmentRepo: AssignmentRepository;
   communicationsRepo: CommunicationsRepository;
@@ -71,6 +93,22 @@ function htmlInsteadOfFile(data: Buffer, filename: string): 'expired_auth' | 'un
 
 /** Fetch a single authorized source and pass its bytes through unchanged. */
 export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput: unknown) {
+  // Validate before reserving capacity; every exit path releases uncommitted capacity.
+  const input = retrieveOnqFileSchema.parse(rawInput);
+  parseOnqFileRef(input.file_ref);
+  let reservation: FileDeliveryReservation | undefined;
+  try {
+    reservation = deps.fileDelivery?.reserve();
+    return await retrieveOriginal(deps, input, reservation);
+  } catch (err) {
+    if (err instanceof FileDeliveryError) return error(err.code, err.message);
+    throw err;
+  } finally {
+    reservation?.release();
+  }
+}
+
+async function retrieveOriginal(deps: RetrieveOnqFileDeps, rawInput: unknown, reservation?: FileDeliveryReservation) {
   const { file_ref } = retrieveOnqFileSchema.parse(rawInput);
   const ref = parseOnqFileRef(file_ref);
   const courseId = OrgUnitId.of(ref.courseId);
@@ -135,13 +173,34 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
   }
   if (data.length === 0) return error('unavailable', 'OnQ returned an empty file.');
   if (data.length > MAX_DOWNLOAD_BYTES) return error('too_large', 'File exceeds the 25 MiB OnQ download limit.');
-  if (data.length > MAX_INLINE_FILE_BYTES)
+  if (!reservation && data.length > MAX_INLINE_FILE_BYTES)
     return error('too_large', `This ${data.length}-byte file cannot be delivered through the current tunnel's 10 MiB response limit. The original file was not sent.`);
   const wrongBody = htmlInsteadOfFile(data, filename);
   if (wrongBody === 'expired_auth') return error('expired_auth', 'OnQ returned a sign-in page instead of the file. Renew the Queen’s browser session.');
   if (wrongBody === 'unavailable') return error('unavailable', `OnQ returned an HTML page instead of ${filename}. The file may have been moved; list it again.`);
   const detected = detectFileFormat(data, filename);
   const digest = createHash('sha256').update(data).digest('hex');
+  if (reservation) {
+    const safeName = safeFilename(filename);
+    const delivery = reservation.publish({ data, filename: safeName, mimeType: detected.mimeType });
+    return {
+      content: [
+        { type: 'text' as const, text: `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). ` +
+          `Download the unchanged original from the resource link before making content claims. ` +
+          `Verify byte length and SHA-256 ${digest} when workspace tools allow. ` +
+          'Read text and inspect page images for diagrams, tables and layout. ' +
+          'If the link expires, call retrieve_onq_file with the same file_ref. ' +
+          'If downloading or opening is unavailable, report that limitation; a link alone is not a read document. ' +
+          'Do not send the private download URL to web search.' },
+        { type: 'resource_link' as const, uri: delivery.downloadUrl, name: safeName,
+          mimeType: detected.mimeType, size: data.length },
+      ],
+      structuredContent: { status: 'ok', delivery: 'download_url', file_ref,
+        course_id: ref.courseId, filename, save_as: safeName, mime_type: detected.mimeType,
+        byte_length: data.length, sha256: digest, download_url: delivery.downloadUrl,
+        expires_at: delivery.expiresAt, retrieved_at: new Date().toISOString() },
+    };
+  }
   const uri = `onq-file://course/${ref.courseId}/${digest}/${encodeURIComponent(filename)}`;
   const blob = data.toString('base64');
   const saveAs = safeFilename(filename);

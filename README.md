@@ -23,6 +23,10 @@ Complete the Queen's sign-in in the browser. Next, [configure the private tunnel
 
 This branch is the maintained Windows and ChatGPT version of the OnQ server. It began from Brightspace MCP v1.3.1; the license retains that attribution. Automated tests run locally, while Queen's tenant responses require live checks in the Windows session.
 
+## Optional Windows-hosted file downloads
+
+[Download setup](docs/onq/DOWNLOADS.md) adds expiring original-file links using Windows memory and an outbound Cloudflare Tunnel. Embedded delivery remains the default. The guide starts with a synthetic PDF probe and explains the branch/deployment requirements.
+
 ## Repository notes
 
 - [ONQ-README.md](ONQ-README.md): features and project scope

@@ -51,5 +51,11 @@ export async function runServe(opts: ServeOptions): Promise<void> {
   process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
   process.on('SIGINT', () => { void shutdown('SIGINT'); });
 
-  await startServer(deps);
+  try {
+    await startServer(deps);
+  } catch (err) {
+    // A download-port collision must not leave browsers/Redis keeping a failed startup alive.
+    await deps.disposables.disposeAll();
+    throw err;
+  }
 }

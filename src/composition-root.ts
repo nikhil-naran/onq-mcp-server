@@ -26,6 +26,7 @@ import {
   buildStrategyResolver,
 } from '@/composition/auth.js';
 import { makeSharedRedisLoader } from '@/composition/redis.js';
+import { buildFileDelivery } from '@/composition/file-delivery.js';
 import { buildStorage } from '@/composition/storage.js';
 import { buildApiClient } from '@/composition/http.js';
 import { buildRepositories } from '@/composition/repositories.js';
@@ -131,6 +132,9 @@ export async function buildDependencies(input: BuildDependenciesInput): Promise<
     disabled: true,
   });
 
+  const fileDelivery = buildFileDelivery(config);
+  if (fileDelivery) disposables.add(() => fileDelivery.dispose());
+
   const output = buildOutputContext({
     ...(config.output?.tz !== undefined ? { tz: config.output.tz } : {}),
     ...(config.output?.locale !== undefined ? { locale: config.output.locale } : {}),
@@ -139,6 +143,7 @@ export async function buildDependencies(input: BuildDependenciesInput): Promise<
   });
 
   return {
+    ...(fileDelivery ? { fileDelivery } : {}),
     onqRepo: new D2lOnqRepository(apiClient, versions.le, baseUrl),
     ensureAuth,
     profile: profileName,
