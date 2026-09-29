@@ -49,7 +49,7 @@ import { handleGetDiscussions, type GetDiscussionsDeps } from './tools/get-discu
 import { handleGetCalendarEvents, type GetCalendarEventsDeps } from './tools/get-calendar-events.tool.js';
 import { handleGetAssignmentFiles, type GetAssignmentFilesDeps } from './tools/get-assignment-files.tool.js';
 import { handleFindOnqFiles, findOnqFilesSchema, type FindOnqFilesDeps } from './tools/find-onq-files.tool.js';
-import { handleRetrieveOnqFile, retrieveOnqFileSchema, type RetrieveOnqFileDeps } from './tools/retrieve-onq-file.tool.js';
+import { handleRetrieveOnqFile, retrieveOnqFileSchema, retrieveOnqFileOutputSchema, type RetrieveOnqFileDeps } from './tools/retrieve-onq-file.tool.js';
 import { handleGetModule, getModuleSchema, type GetModuleDeps } from './tools/get-module.tool.js';
 import { handleGetAuditLog, type GetAuditLogDeps } from './tools/get-audit-log.tool.js';
 import { handleListQuizzes, type ListQuizzesDeps } from './tools/list-quizzes.tool.js';
@@ -430,14 +430,14 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     {
       title: 'Retrieve Original OnQ File',
       description:
-        'Return the complete original OnQ file as an embedded MCP resource with SHA-256 metadata. ' +
-        'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
-        'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
-        'Save the original before reading it, following the numbered steps in the result: write the blob in chunks, check its length, ' +
-        'decode once, and verify byte length and SHA-256; never stream base64 through an interactive terminal or use a partial copy. ' +
-        'Link the saved file as a clickable source. Read it the way an uploaded file is read: render PDF pages or slides to images and look at them. ' +
-        'Do not extract text. Keep file_ref to retrieve it again in later turns. The server passes the bytes through unchanged.',
+        'Retrieve the complete original OnQ file with filename, MIME type, byte length and SHA-256. ' +
+        'Use a file_ref from discovery or attachment metadata. When configured, returns an expiring HTTPS download link; ' +
+        'download the original into the workspace before reading it. Never send private download URLs to web search. ' +
+        'Otherwise returns an embedded original with save instructions. Renew expired links with the same file_ref. ' +
+        'Retrieve at most two files concurrently; retry delivery_busy after other retrievals finish. ' +
+        'A returned link is not proof of a successful download or read. Link the saved original as a source.',
       inputSchema: retrieveOnqFileSchema.shape,
+      outputSchema: retrieveOnqFileOutputSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async (input: unknown) => handleRetrieveOnqFile(deps, input),
@@ -560,4 +560,3 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     );
   }
 }
-

@@ -211,7 +211,31 @@ const OutputConfigSchema = z
   })
   .default({ format: 'markdown', include_meta_footer: true });
 
+export const FileDeliveryConfigSchema = z.object({
+  mode: z.enum(['embedded', 'download']).default('embedded'),
+  public_base_url: z.url().optional(),
+  port: z.number().int().min(1024).max(65535).default(8766),
+  ttl_seconds: z.number().int().min(30).max(3600).default(900),
+  max_cache_bytes: z.number().int().min(25 * 1024 * 1024).max(512 * 1024 * 1024).default(128 * 1024 * 1024),
+  max_entries: z.number().int().min(1).max(128).default(16),
+  max_concurrent_retrievals: z.number().int().min(1).max(4).default(2),
+  max_concurrent_responses: z.number().int().min(1).max(64).default(16),
+}).strict().superRefine((value, ctx) => {
+  if (value.mode !== 'download') return;
+  let valid = false;
+  try {
+    const u = new URL(value.public_base_url ?? '');
+    valid = u.protocol === 'https:' && !u.username && !u.password &&
+      !u.search && !u.hash && u.pathname === '/' &&
+      u.hostname !== 'localhost' && !u.hostname.endsWith('.localhost') &&
+      !u.hostname.endsWith('.local') && !/^[\d.]+$/.test(u.hostname) && !u.hostname.includes(':');
+  } catch { /* Report only the config key, never an invalid URL containing credentials. */ }
+  if (!valid) ctx.addIssue({ code: 'custom', path: ['public_base_url'],
+    message: 'Download mode requires a public HTTPS hostname without credentials, path, query or fragment.' });
+});
+
 export const ConfigSchema = z.object({
+  file_delivery: FileDeliveryConfigSchema.optional(),
   default_profile: z.string(),
   profiles: z.record(z.string(), ProfileSchema),
   logging: LoggingSchema.default({ level: 'info' }),

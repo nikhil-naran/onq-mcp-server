@@ -8,7 +8,9 @@ Persistent interactive Queen’s sign-in, credential-file repair, rubric access,
 
 The Windows tunnel sets `ONQ_TOOL_PROFILE=coursework`. It keeps the separate course, module, assignment, announcement, grade, calendar, quiz-list, and file discovery/retrieval tools. It hides completion counts and quiz attempts until their student permissions and results are verified against OnQ. It also hides `clear_cache`, `get_diagnostics`, and `get_audit_log` from ordinary coursework; run the server locally without that profile for troubleshooting. `get_roster(format="emails")` uses the same cached classlist as the people view. `get_course_overview` reports access separately for each requested section of one course, including historical courses.
 
-`retrieve_onq_file` returns original bytes as an MCP resource with filename, MIME type, byte length, and SHA-256 when the file fits the tunnel. The tunnel has a 10 MiB response limit, so the tool returns `too_large` for files over 6 MiB instead of sending a response that would stop the tunnel. Whether ChatGPT makes a supported resource a native conversation attachment requires a separate live check. If it does not, use OnQ's own download and attach flow for the original file. The server does not extract PDF text or render PDF pages.
+**Optional download links:** [DOWNLOADS.md](DOWNLOADS.md) adds a bounded Windows-memory file service and a separate outbound HTTPS reverse tunnel. This is opt-in; no phone/Mac helper or cloud file storage is needed. Complete the synthetic PDF probe before enabling it.
+
+In default embedded mode, `retrieve_onq_file` returns original bytes as an MCP resource with filename, MIME type, byte length, and SHA-256 when the file fits the tunnel. The tunnel has a 10 MiB response limit, so the tool returns `too_large` for files over 6 MiB instead of sending a response that would stop the tunnel. Whether ChatGPT makes a supported resource a native conversation attachment requires a separate live check. If it does not, use OnQ's own download and attach flow for the original file. The server does not extract PDF text or render PDF pages.
 
 ## 1. Prepare Windows
 
@@ -30,7 +32,7 @@ The login strategy first checks saved browser cookies without showing a window. 
 
 OpenAI’s [Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) documents stdio connections and the current account requirements. You need a tunnel ID, Platform runtime API key, tunnel permissions, and developer-mode access in the target ChatGPT workspace. These are separate from your ChatGPT subscription. Availability and costs must be checked in your account.
 
-Download the appropriate Windows binary from [OpenAI’s tunnel-client releases](https://github.com/openai/tunnel-client/releases/latest), verify it against the release checksum, and put `tunnel-client.exe` on PATH. Windows amd64 and arm64 archives were listed during preparation. Do not use an unrelated public forwarding service.
+Download the appropriate Windows binary from [OpenAI’s tunnel-client releases](https://github.com/openai/tunnel-client/releases/latest), verify it against the release checksum, and put `tunnel-client.exe` on PATH. Windows amd64 and arm64 archives were listed during preparation. Keep the MCP server on this private tunnel. The optional download service uses a separate, narrowly scoped reverse tunnel described in DOWNLOADS.md.
 
 Create a tunnel in [Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels) and associate it with the ChatGPT workspace you intend to use. Then:
 
@@ -70,7 +72,7 @@ Stop the task before deleting the private browser profile for logout. Revoking t
 
 ## Live acceptance checklist
 
-For course files, ChatGPT uses `find_onq_files(query)` to search course, module, topic, link, and filename metadata, then `retrieve_onq_file(file_ref)` to receive the complete original file as an embedded MCP resource. Assignment, announcement, and submission metadata tools also return `file_ref` values for the same retrieval tool. The server does not extract file text, render pages, or save files. File discovery cannot see inside a poorly labeled file; when metadata is weak, ChatGPT may need to inspect several candidates. Refresh the ChatGPT connection after updating tools. A PDF later-page claim matched OnQ's viewer on 2026-09-28 using the earlier `get_original_pdf` tool. Repeat this live test with `retrieve_onq_file`, and test PowerPoint and Markdown separately before claiming those formats are understood by ChatGPT.
+For course files, ChatGPT uses `find_onq_files(query)` to search course, module, topic, link, and filename metadata, then `retrieve_onq_file(file_ref)` to receive the complete original file as an embedded MCP resource. Assignment, announcement, and submission metadata tools also return `file_ref` values for the same retrieval tool. The server does not extract file text, render pages, or persist course files to disk. Optional download mode retains original buffers temporarily in bounded memory. File discovery cannot see inside a poorly labeled file; when metadata is weak, ChatGPT may need to inspect several candidates. Refresh the ChatGPT connection after updating tools. A PDF later-page claim matched OnQ's viewer on 2026-09-28 using the earlier `get_original_pdf` tool. Repeat this live test with `retrieve_onq_file`, and test PowerPoint and Markdown separately before claiming those formats are understood by ChatGPT.
 
 - Courses match OnQ, including expected active courses.
 - Personal grades and quiz attempts are visible without staff permissions.
