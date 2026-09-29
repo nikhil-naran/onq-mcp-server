@@ -112,6 +112,8 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
     { type: 'text' as const, text: `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). ` +
       `SHA-256: ${digest}. The complete, unchanged bytes are included as an MCP resource. ` +
       `Source file_ref for later questions: ${file_ref}. ${inspectionHint(detected.mimeType)} ` +
+      'Attach this complete original file to the answer as a clickable source the user can open later; ' +
+      'do not substitute a summary or extracted text. ' +
       'If this client only exposes resource.blob, base64-decode it into a temporary client-side file ' +
       'using a safe filename based on the returned filename; SHA-256 is a checksum, not decodable file data. ' +
       'If the earlier attachment is unavailable later, retrieve this file_ref again. ' +
