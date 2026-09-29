@@ -430,10 +430,13 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     {
       title: 'Retrieve Original OnQ File',
       description:
-        'Return the complete original file bytes from OnQ as an MCP resource with SHA-256 metadata. ' +
+        'Return the complete original OnQ file as an embedded MCP resource with SHA-256 metadata. ' +
         'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
         'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
-        'The server does not extract text or render pages. If this ChatGPT client cannot inspect the file type, say so.',
+        'Save the original before reading it, following the numbered steps in the result: write the blob in chunks, check its length, ' +
+        'decode once, and verify byte length and SHA-256; never stream base64 through an interactive terminal or use a partial copy. ' +
+        'Link the saved file as a clickable source. Read it the way an uploaded file is read: render PDF pages or slides to images and look at them. ' +
+        'Do not extract text. Keep file_ref to retrieve it again in later turns. The server passes the bytes through unchanged.',
       inputSchema: retrieveOnqFileSchema.shape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
@@ -557,3 +560,4 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
     );
   }
 }
+

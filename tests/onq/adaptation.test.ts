@@ -79,12 +79,25 @@ describe('bounded authenticated downloads', () => {
   it('does not forward session cookies to a redirect outside OnQ', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: 'https://other.example/file' } }));
     vi.stubGlobal('fetch', fetch);
-    await expect(client().getRaw('/file')).rejects.toThrow('failed');
+    await expect(client().getRaw('/file')).rejects.toMatchObject({ name: 'DownloadRejectedError', reason: 'external_redirect' });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it('enforces the byte limit before buffering a declared large body', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('small', { headers: { 'content-length': String(30 * 1024 * 1024) } })));
-    await expect(client().getRaw('/file')).rejects.toThrow('25 MB');
+    await expect(client().getRaw('/file')).rejects.toMatchObject({ name: 'DownloadRejectedError', reason: 'too_large' });
+  });
+  it('neither retries a rejected download nor lets it open the circuit breaker', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://other.example/file' } }))
+      .mockResolvedValueOnce(new Response('small', { headers: { 'content-length': String(30 * 1024 * 1024) } }))
+      .mockResolvedValueOnce(new Response('document'));
+    vi.stubGlobal('fetch', fetch);
+    const c = new D2lApiClient({ baseUrl: ctx.baseUrl, getToken: async () => AccessToken.cookie('session=fake'),
+      retry: { maxAttempts: 3, initialMs: 1, maxMs: 1 }, circuit: { failureThreshold: 1, resetTimeoutMs: 60_000 } });
+    await expect(c.getRaw('/external')).rejects.toMatchObject({ reason: 'external_redirect' });
+    await expect(c.getRaw('/huge')).rejects.toMatchObject({ reason: 'too_large' });
+    expect((await c.getRaw('/file')).toString()).toBe('document');
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
   it('refreshes once after a 401 on a binary download', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 401 })).mockResolvedValueOnce(new Response('document'));

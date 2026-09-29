@@ -20,6 +20,24 @@ export class NetworkError extends InfrastructureError {
   }
 }
 
+export type DownloadRejectionReason = 'too_large' | 'external_redirect' | 'bad_redirect';
+
+/**
+ * The client refused a binary download (size cap, off-tenant or malformed
+ * redirect). Deterministic, so it is never retried and never counts against
+ * the circuit breaker: a single oversized file must not open it for the
+ * whole server.
+ */
+export class DownloadRejectedError extends InfrastructureError {
+  readonly code = 'DOWNLOAD_REJECTED';
+  constructor(
+    readonly reason: DownloadRejectionReason,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export class RateLimitedError extends InfrastructureError {
   readonly code = 'HTTP_429';
   constructor(
