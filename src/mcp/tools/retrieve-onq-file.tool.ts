@@ -26,6 +26,17 @@ export interface RetrieveOnqFileDeps {
 const error = (code: string, message: string) => ({ isError: true,
   content: [{ type: 'text' as const, text: message }], structuredContent: { status: 'unavailable', error_code: code, message } });
 
+function inspectionHint(mimeType: string): string {
+  if (mimeType === 'application/pdf')
+    return 'Open or render the PDF with a client-side viewer and inspect the relevant pages visually, including diagrams. Text extraction alone does not verify visual details.';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+      mimeType === 'application/vnd.ms-powerpoint')
+    return 'Open or render the presentation with a client-side viewer and inspect the relevant slides visually, including diagrams. Text extraction alone does not verify slide layout.';
+  if (mimeType.startsWith('image/'))
+    return 'Open the image with a client-side viewer before describing its visual contents.';
+  return 'Open the original file with a compatible client-side viewer before describing its contents. If this client cannot inspect the format, say so.';
+}
+
 /** Fetch a single authorized source and pass its bytes through unchanged. */
 export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput: unknown) {
   const { file_ref } = retrieveOnqFileSchema.parse(rawInput);
@@ -100,6 +111,10 @@ export async function handleRetrieveOnqFile(deps: RetrieveOnqFileDeps, rawInput:
   return { content: [
     { type: 'text' as const, text: `Original OnQ file: ${filename} (${data.length} bytes, ${detected.mimeType}). ` +
       `SHA-256: ${digest}. The complete, unchanged bytes are included as an MCP resource. ` +
+      `Source file_ref for later questions: ${file_ref}. ${inspectionHint(detected.mimeType)} ` +
+      'If this client only exposes resource.blob, base64-decode it into a temporary client-side file ' +
+      'using a safe filename based on the returned filename; SHA-256 is a checksum, not decodable file data. ' +
+      'If the earlier attachment is unavailable later, retrieve this file_ref again. ' +
       'The server did not extract text or render pages. If this client cannot open the resource as a file, say so.' },
     { type: 'resource' as const, resource: {
       uri,
