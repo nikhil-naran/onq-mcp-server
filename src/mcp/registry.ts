@@ -434,8 +434,8 @@ export function registerAllTools(server: McpServer, deps: ToolDeps): void {
         'Works for course topics, course files, assignment and announcement attachments, and submitted files. ' +
         'Use a file_ref from find_onq_files or the relevant metadata tool. ' +
         'First save the complete original bytes as a file in the client workspace (/mnt/data when available) and attach/link it as a clickable source. ' +
-        'Do this before text extraction, rendering, or summarizing. If only the base64 blob is exposed, decode it directly to that saved file. ' +
-        'Then open or render relevant PDF pages, slides, or images from the saved file; do not start with pdftotext. ' +
+        'Do this before text extraction, rendering, or summarizing. If only the base64 blob is exposed, decode it directly to that final file without interactive terminal streaming. ' +
+        'Verify byte length and SHA-256, then read the saved file with a format-aware viewer. Render relevant PDF pages or slides for visual claims; extracted text can help locate passages but does not verify diagrams. ' +
         'Keep file_ref to retrieve it again in later turns; a summary or extracted text is not a file attachment. ' +
         'The server does not extract text or render pages. If this client cannot inspect the file type, say so.',
       inputSchema: retrieveOnqFileSchema.shape,
